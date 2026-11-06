@@ -5,7 +5,20 @@ import { FifaCard } from './FifaCard'
 import { PRESET_FORMATIONS } from '../lib/formations'
 import { CardDetailModal } from './CardDetailModal'
 import { toPng } from 'html-to-image'
-import { Share2, Play, AlertCircle, X, Sliders, Eraser } from 'lucide-react'
+import {
+  Share2,
+  Play,
+  AlertCircle,
+  X,
+  Sliders,
+  Eraser,
+  UserCheck,
+  ArrowUpDown,
+  LogOut,
+  Eye,
+  Check,
+  Sparkles,
+} from 'lucide-react'
 
 export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () => {
   const {
@@ -23,6 +36,8 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
     changeMatchFormat,
     clearPitchToRibbon,
     swapOrAssignSlot,
+    assignPlayerToSlot,
+    removePlayerFromSlot,
     changeFormation,
     startMatch,
     cancelMatch,
@@ -32,15 +47,30 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
   const pitchRef = useRef<HTMLDivElement>(null)
   const extraRibbonRef = useRef<HTMLDivElement>(null)
 
-  // Seçili kart
+  // Seçili kart (ekstra şeritten veya sahadan)
   const [selectedItem, setSelectedItem] = useState<
     | { type: 'slot'; side: TeamSide; slotIndex: number; playerId: string | null }
     | { type: 'extra'; playerId: string }
     | null
   >(null)
 
-  // Detay modalı
+  // Detay modalı (Büyük FUT kartı)
   const [inspectPlayer, setInspectPlayer] = useState<{ player: Player; side: TeamSide | null } | null>(null)
+
+  // Mobil Slota Oyuncu Seçici Modal (Boş veya dolu slota doğrudan yedekten seçme)
+  const [slotPicker, setSlotPicker] = useState<{
+    side: TeamSide
+    slotIndex: number
+    positionLabel: string
+  } | null>(null)
+
+  // Sahadaki dolu slota dokunulduğunda çıkan hızlı aksiyon menüsü
+  const [slotActionMenu, setSlotActionMenu] = useState<{
+    side: TeamSide
+    slotIndex: number
+    player: Player
+    positionLabel: string
+  } | null>(null)
 
   // Diziliş Değiştirme Modalı
   const [formationModalSide, setFormationModalSide] = useState<TeamSide | null>(null)
@@ -85,7 +115,7 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
     }
   }
 
-  // Tıklama ile Seçim / Yer Değiştirme
+  // Tıklama ile Seçim / Yer Değiştirme / Modal Açma
   const handleSlotClick = (side: TeamSide, slotIndex: number, playerId: string | null) => {
     if (activeMatch || !effectiveIsAdmin) {
       if (playerId) {
@@ -95,13 +125,41 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
       return
     }
 
-    if (!selectedItem) {
-      if (playerId) {
-        setSelectedItem({ type: 'slot', side, slotIndex, playerId })
+    // 1. Zaten bir yedek kartı veya başka bir slot seçiliyse doğrudan yerleştir
+    if (selectedItem) {
+      if (selectedItem.type === 'extra') {
+        assignPlayerToSlot(selectedItem.playerId, side, slotIndex)
+        setSelectedItem(null)
+        return
       }
+      if (selectedItem.type === 'slot') {
+        swapOrAssignSlot(selectedItem, { type: 'slot', side, slotIndex, playerId })
+        setSelectedItem(null)
+        return
+      }
+    }
+
+    // 2. Seçili kart yoksa:
+    if (!playerId) {
+      // Boş slota tıklandı -> Hızlı yedek oyuncu seçici modalını aç
+      const slot = lineupSlots[side].find(s => s.slot_index === slotIndex)
+      setSlotPicker({
+        side,
+        slotIndex,
+        positionLabel: slot?.position_label || 'MEVKİ',
+      })
     } else {
-      swapOrAssignSlot(selectedItem, { type: 'slot', side, slotIndex, playerId })
-      setSelectedItem(null)
+      // Dolu slota tıklandı -> Aksiyon menüsünü aç
+      const p = players.find(x => x.id === playerId)
+      const slot = lineupSlots[side].find(s => s.slot_index === slotIndex)
+      if (p) {
+        setSlotActionMenu({
+          side,
+          slotIndex,
+          player: p,
+          positionLabel: slot?.position_label || p.position,
+        })
+      }
     }
   }
 
@@ -138,6 +196,10 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
   const onPitchB = lineupSlots.B.filter(s => s.player_id).length
   const isUneven = onPitchA !== onPitchB
 
+  // Seçili ekstra oyuncu detayı
+  const selectedExtraPlayer =
+    selectedItem?.type === 'extra' ? players.find(p => p.id === selectedItem.playerId) : null
+
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-hidden relative">
       
@@ -149,78 +211,87 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
             onClick={() => setIsVisitorPreview(false)}
             className="bg-sky-800 hover:bg-sky-700 text-white text-[10px] px-2 py-0.5 rounded-lg transition"
           >
-            Önizlemeyi Kapat
+            Yöneticiye Dön
           </button>
         </div>
       )}
 
-      {/* Üst Durum Çubuğu */}
-      <div className="px-3 py-2 flex items-center justify-between border-b border-white/10 bg-slate-950/95 z-30">
+      {/* ================= ÜST AKSİYON BARI (KADRO / MAÇ BAŞLAT / FORMAT) ================= */}
+      <div className="bg-slate-900/90 border-b border-slate-800 px-3 py-2 flex items-center justify-between z-30 shadow-md">
+        
+        {/* Sol: Başlık veya Canlı Maç Göstergesi */}
         <div className="flex items-center gap-2">
-          <span className="fut-font text-xl font-bold tracking-widest text-amber-400">FUT.KADRO</span>
+          <span className="fut-font text-lg font-black tracking-wider bg-gradient-to-r from-amber-400 via-yellow-200 to-amber-500 bg-clip-text text-transparent">
+            FUT.KADRO
+          </span>
           {activeMatch ? (
-            <span className="flex items-center gap-1 bg-red-500/20 border border-red-500/40 text-red-400 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span> MAÇ OYNANIYOR
+            <span className="flex items-center gap-1 bg-red-950/80 border border-red-600/50 text-red-400 text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+              CANLI MAÇ
             </span>
           ) : (
-            <span className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+            <span className="bg-slate-800 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
               HAZIRLIK
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        {/* Sağ: Aksiyon Butonları */}
+        <div className="flex items-center gap-2">
+          {/* Kadroyu Paylaş Butonu */}
           <button
             onClick={handleShare}
             disabled={isExporting}
-            className="flex items-center gap-1 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs px-2.5 py-1 rounded-lg border border-slate-700 transition"
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2.5 py-1.5 rounded-xl text-xs font-bold transition shadow-sm active:scale-95 disabled:opacity-50"
+            title="Kadro görselini WhatsApp / Instagram için indir veya paylaş"
           >
-            <Share2 size={13} />
-            <span className="text-[11px] font-bold">Paylaş</span>
+            <Share2 size={13} className="text-amber-400" />
+            <span className="hidden sm:inline">Paylaş</span>
           </button>
 
+          {/* Maç Başlat / Canlı Maçı Bitir */}
           {effectiveIsAdmin && (
             activeMatch ? (
               <button
                 onClick={cancelMatch}
-                className="bg-red-950/80 hover:bg-red-900 border border-red-600/50 text-red-300 text-xs font-bold px-2.5 py-1 rounded-lg transition"
+                className="flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition shadow-lg active:scale-95"
               >
-                Maçı İptal Et
+                <X size={13} />
+                <span>İptal Et</span>
               </button>
             ) : (
               <button
                 onClick={() => {
-                  if (!currentLeague || currentLeague.status !== 'active') {
-                    alert('Maç başlatmak için önce aktif bir lig başlatmalısınız!')
-                    return
-                  }
+                  setMatchTeamAName(teams[0]?.name || 'Kuzey FC')
+                  setMatchTeamBName(teams[1]?.name || 'Güney FC')
                   setShowStartMatchModal(true)
                 }}
-                className="flex items-center gap-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black uppercase px-3 py-1 rounded-lg shadow-lg tracking-wide transition active:scale-95"
+                className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition shadow-lg shadow-amber-500/20 active:scale-95"
               >
-                <Play size={12} fill="currentColor" />
-                <span>Başlat</span>
+                <Play size={13} fill="currentColor" />
+                <span>BAŞLAT</span>
               </button>
             )
           )}
         </div>
+
       </div>
 
-      {/* ================= HIZLI MAÇ FORMATI & SAHAYI BOŞALT (Yönetici) ================= */}
+      {/* ================= FORMAT SEÇİCİ & SAHAYI BOŞALT BARI ================= */}
       {effectiveIsAdmin && !activeMatch && (
-        <div className="bg-slate-900/90 border-b border-slate-800 px-3 py-1.5 flex items-center justify-between text-xs z-20">
+        <div className="bg-slate-900/60 border-b border-slate-800/80 px-3 py-1.5 flex items-center justify-between text-xs z-20">
           
           <div className="flex items-center gap-1">
-            <span className="text-[10px] text-slate-400 font-bold uppercase mr-1">Format:</span>
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mr-1">FORMAT:</span>
             {[5, 6, 7, 8].map(count => (
               <button
                 key={count}
                 onClick={() => changeMatchFormat(count)}
                 className={`
-                  px-2 py-0.5 rounded-md text-[10px] font-black transition
+                  px-2 py-0.5 rounded-md text-[11px] font-black transition
                   ${currentFormat === count
-                    ? 'bg-amber-500 text-slate-950 shadow-sm'
-                    : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'}
+                    ? 'bg-amber-400 text-slate-950 shadow-sm'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}
                 `}
               >
                 {count}v{count}
@@ -307,13 +378,15 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
                 <div key={`line-a-${lineIdx}`} className="flex justify-around items-center px-1">
                   {slotsInLine.map(slot => {
                     const player = players.find(p => p.id === slot.player_id)
-                    const isSelected = selectedItem?.type === 'slot' && selectedItem.side === 'A' && selectedItem.slotIndex === slot.slot_index
+                    const isSelected =
+                      selectedItem?.type === 'slot' &&
+                      selectedItem.side === 'A' &&
+                      selectedItem.slotIndex === slot.slot_index
 
                     return (
                       <div
                         key={slot.id}
-                        onDoubleClick={() => player && setInspectPlayer({ player, side: 'A' })}
-                        className="relative"
+                        className="relative touch-manipulation"
                       >
                         {player ? (
                           <FifaCard
@@ -325,18 +398,27 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
                             onClick={() => handleSlotClick('A', slot.slot_index, player.id)}
                           />
                         ) : (
-                          <div
+                          <button
+                            type="button"
                             onClick={() => handleSlotClick('A', slot.slot_index, null)}
                             className={`
-                              w-[52px] h-[66px] fut-shield-mini border border-dashed border-white/40
-                              bg-black/35 backdrop-blur-xs flex flex-col items-center justify-center
-                              cursor-pointer transition-all hover:bg-white/10 active:scale-90
-                              ${isSelected ? 'ring-2 ring-emerald-400 bg-emerald-950/40 shadow-[0_0_12px_#10b981]' : ''}
+                              w-[54px] h-[68px] fut-shield-mini border-2 border-dashed
+                              flex flex-col items-center justify-center
+                              transition-all active:scale-95 touch-manipulation cursor-pointer select-none
+                              ${isSelected
+                                ? 'border-emerald-400 bg-emerald-950/60 shadow-[0_0_12px_#10b981]'
+                                : selectedItem
+                                ? 'border-amber-400/80 bg-amber-950/30 animate-pulse hover:bg-amber-900/40'
+                                : 'border-white/40 bg-black/40 hover:bg-white/10'}
                             `}
                           >
-                            <span className="text-[10px] font-black text-slate-300">{slot.position_label}</span>
-                            <span className="text-[8px] text-slate-400 font-bold">+ Boş</span>
-                          </div>
+                            <span className="text-[11px] font-black text-slate-200 tracking-wider">
+                              {slot.position_label}
+                            </span>
+                            <span className="text-[8px] text-amber-400 font-bold uppercase mt-0.5">
+                              {selectedItem ? 'Buraya Koy' : '+ Boş'}
+                            </span>
+                          </button>
                         )}
                       </div>
                     )
@@ -357,13 +439,15 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
                 <div key={`line-b-${lineIdx}`} className="flex justify-around items-center px-1">
                   {slotsInLine.map(slot => {
                     const player = players.find(p => p.id === slot.player_id)
-                    const isSelected = selectedItem?.type === 'slot' && selectedItem.side === 'B' && selectedItem.slotIndex === slot.slot_index
+                    const isSelected =
+                      selectedItem?.type === 'slot' &&
+                      selectedItem.side === 'B' &&
+                      selectedItem.slotIndex === slot.slot_index
 
                     return (
                       <div
                         key={slot.id}
-                        onDoubleClick={() => player && setInspectPlayer({ player, side: 'B' })}
-                        className="relative"
+                        className="relative touch-manipulation"
                       >
                         {player ? (
                           <FifaCard
@@ -375,18 +459,27 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
                             onClick={() => handleSlotClick('B', slot.slot_index, player.id)}
                           />
                         ) : (
-                          <div
+                          <button
+                            type="button"
                             onClick={() => handleSlotClick('B', slot.slot_index, null)}
                             className={`
-                              w-[52px] h-[66px] fut-shield-mini border border-dashed border-white/40
-                              bg-black/35 backdrop-blur-xs flex flex-col items-center justify-center
-                              cursor-pointer transition-all hover:bg-white/10 active:scale-90
-                              ${isSelected ? 'ring-2 ring-emerald-400 bg-emerald-950/40 shadow-[0_0_12px_#10b981]' : ''}
+                              w-[54px] h-[68px] fut-shield-mini border-2 border-dashed
+                              flex flex-col items-center justify-center
+                              transition-all active:scale-95 touch-manipulation cursor-pointer select-none
+                              ${isSelected
+                                ? 'border-emerald-400 bg-emerald-950/60 shadow-[0_0_12px_#10b981]'
+                                : selectedItem
+                                ? 'border-amber-400/80 bg-amber-950/30 animate-pulse hover:bg-amber-900/40'
+                                : 'border-white/40 bg-black/40 hover:bg-white/10'}
                             `}
                           >
-                            <span className="text-[10px] font-black text-slate-300">{slot.position_label}</span>
-                            <span className="text-[8px] text-slate-400 font-bold">+ Boş</span>
-                          </div>
+                            <span className="text-[11px] font-black text-slate-200 tracking-wider">
+                              {slot.position_label}
+                            </span>
+                            <span className="text-[8px] text-amber-400 font-bold uppercase mt-0.5">
+                              {selectedItem ? 'Buraya Koy' : '+ Boş'}
+                            </span>
+                          </button>
                         )}
                       </div>
                     )
@@ -425,7 +518,27 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
 
       </div>
 
-      {/* ================= ALT EKSTRA ŞERİT (DOKUNMA VE YATAY KAYDIRMA GELİŞTİRİLDİ) ================= */}
+      {/* ================= SEÇİLEN YEDEK OYUNCU YÜZEN BİLDİRİMİ ================= */}
+      {selectedExtraPlayer && (
+        <div className="bg-emerald-950 border-t border-emerald-500 px-3 py-2 flex items-center justify-between text-xs text-white z-30 shadow-lg animate-in slide-in-from-bottom-2">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+            <div>
+              <span className="font-black text-amber-300">{selectedExtraPlayer.full_name}</span>
+              <span className="text-[10px] text-emerald-300 ml-1.5 font-bold">({selectedExtraPlayer.position} - {selectedExtraPlayer.power})</span>
+              <span className="text-[10px] text-slate-200 block sm:inline sm:ml-2">Sahada istediğin slota dokun!</span>
+            </div>
+          </div>
+          <button
+            onClick={() => setSelectedItem(null)}
+            className="bg-emerald-800 hover:bg-emerald-700 text-white text-[10px] px-2.5 py-1 rounded-lg font-bold"
+          >
+            Seçimi İptal Et
+          </button>
+        </div>
+      )}
+
+      {/* ================= ALT EKSTRA ŞERİT (DOKUNMA VE YATAY KAYDIRMA) ================= */}
       {extraPlayers.length > 0 && (
         <div className="bg-slate-950/95 border-t border-slate-800 px-3 py-2 z-20 shadow-2xl">
           <div className="flex items-center justify-between mb-1.5">
@@ -438,11 +551,11 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
               </span>
             </div>
             <span className="text-[9px] text-slate-400 font-medium">
-              {selectedItem ? 'Hedef slota dokun' : 'Sahaya koymak için tıkla'}
+              {selectedItem ? 'Sahadaki boş slota dokun' : 'Sahaya koymak için tıkla'}
             </span>
           </div>
 
-          {/* Yatay Kaydırma Kutusu (Touch-scroll ve Scrollbar desteği) */}
+          {/* Yatay Kaydırma Kutusu */}
           <div
             ref={extraRibbonRef}
             className="flex items-center gap-2.5 overflow-x-auto pb-2 smooth-scroll-x no-scrollbar select-none"
@@ -450,7 +563,7 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
             {extraPlayers.map(player => {
               const isSelected = selectedItem?.type === 'extra' && selectedItem.playerId === player.id
               return (
-                <div key={player.id} className="flex-shrink-0">
+                <div key={player.id} className="flex-shrink-0 touch-manipulation">
                   <FifaCard
                     player={player}
                     size="mini"
@@ -460,6 +573,197 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: DOĞRUDAN SLOTA OYUNCU SEÇİCİ (MOBİL İÇİN ÇOK PRATİK) ================= */}
+      {slotPicker && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border-t sm:border border-slate-800 rounded-t-3xl sm:rounded-2xl p-4 w-full max-w-md max-h-[85vh] flex flex-col shadow-2xl">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+                  {slotPicker.side === 'A' ? teams[0]?.name : teams[1]?.name} Kadrosu
+                </span>
+                <h3 className="text-base font-black text-white flex items-center gap-2">
+                  <span className="text-amber-400 font-extrabold">{slotPicker.positionLabel}</span> Pozisyonuna Oyuncu Seç
+                </h3>
+              </div>
+              <button
+                onClick={() => setSlotPicker(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {extraPlayers.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs">
+                  Yedek şeridinde hiç oyuncu kalmadı. "Oyuncular" sekmesinden yeni oyuncu ekleyebilirsiniz.
+                </div>
+              ) : (
+                [...extraPlayers]
+                  .sort((a, b) => {
+                    // Mevkisi eşleşenleri en başa al
+                    const aMatches = a.position === slotPicker.positionLabel ? 1 : 0
+                    const bMatches = b.position === slotPicker.positionLabel ? 1 : 0
+                    if (bMatches !== aMatches) return bMatches - aMatches
+                    return b.power - a.power
+                  })
+                  .map(p => {
+                    const isPerfectMatch = p.position === slotPicker.positionLabel
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => {
+                          assignPlayerToSlot(p.id, slotPicker.side, slotPicker.slotIndex)
+                          setSlotPicker(null)
+                        }}
+                        className={`
+                          flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition active:scale-[0.98]
+                          ${isPerfectMatch
+                            ? 'bg-amber-950/30 border-amber-500/50 hover:bg-amber-900/40'
+                            : 'bg-slate-800/80 border-slate-700 hover:bg-slate-700'}
+                        `}
+                      >
+                        <div className="flex items-center gap-3">
+                          {p.photo_url ? (
+                            <img
+                              src={p.photo_url}
+                              alt={p.full_name}
+                              className="w-10 h-10 rounded-xl object-cover border border-slate-600"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-slate-700 flex items-center justify-center font-black text-amber-400 border border-slate-600">
+                              {p.full_name.substring(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-white text-sm">{p.full_name}</span>
+                              {isPerfectMatch && (
+                                <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.2 rounded font-black">
+                                  Tam Uyumlu
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-slate-400">
+                              <span>Mevki: <strong className="text-slate-200">{p.position}</strong></span>
+                              <span>•</span>
+                              <span>Güç: <strong className="text-amber-400">{p.power}</strong></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black px-3 py-1.5 rounded-xl flex items-center gap-1 shadow"
+                        >
+                          <Check size={14} />
+                          <span>Koy</span>
+                        </button>
+                      </div>
+                    )
+                  })
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 mt-2">
+              <button
+                type="button"
+                onClick={() => setSlotPicker(null)}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs py-2.5 rounded-xl transition"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: SAHADAKİ OYUNCU İÇİN HIZLI İŞLEM MENÜSÜ ================= */}
+      {slotActionMenu && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border-t sm:border border-slate-800 rounded-t-3xl sm:rounded-2xl p-4 w-full max-w-sm shadow-2xl">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-amber-400 bg-amber-950/60 border border-amber-600/40 px-2 py-0.5 rounded-md">
+                  {slotActionMenu.positionLabel}
+                </span>
+                <h3 className="text-sm font-black text-white">{slotActionMenu.player.full_name}</h3>
+              </div>
+              <button
+                onClick={() => setSlotActionMenu(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2 mb-3">
+              {/* Başka Oyuncu Seç */}
+              <button
+                onClick={() => {
+                  const targetSide = slotActionMenu.side
+                  const targetSlotIndex = slotActionMenu.slotIndex
+                  const targetLabel = slotActionMenu.positionLabel
+                  setSlotActionMenu(null)
+                  setSlotPicker({
+                    side: targetSide,
+                    slotIndex: targetSlotIndex,
+                    positionLabel: targetLabel,
+                  })
+                }}
+                className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold text-xs p-3 rounded-xl flex items-center justify-between transition active:scale-95"
+              >
+                <div className="flex items-center gap-2">
+                  <ArrowUpDown size={15} className="text-amber-400" />
+                  <span>Başka Oyuncuyla Değiştir</span>
+                </div>
+                <span className="text-[10px] text-slate-400">Yedeklerden Seç ➔</span>
+              </button>
+
+              {/* Yedeğe Çıkar */}
+              <button
+                onClick={() => {
+                  removePlayerFromSlot(slotActionMenu.side, slotActionMenu.slotIndex)
+                  setSlotActionMenu(null)
+                }}
+                className="w-full bg-red-950/40 hover:bg-red-950/80 border border-red-500/30 text-red-300 font-bold text-xs p-3 rounded-xl flex items-center justify-between transition active:scale-95"
+              >
+                <div className="flex items-center gap-2">
+                  <LogOut size={15} className="text-red-400" />
+                  <span>Sahadan Çıkar (Yedeğe Al)</span>
+                </div>
+                <span className="text-[10px] text-red-400/80">Boşalt</span>
+              </button>
+
+              {/* Büyük FUT Kartını İncele */}
+              <button
+                onClick={() => {
+                  const p = slotActionMenu.player
+                  const side = slotActionMenu.side
+                  setSlotActionMenu(null)
+                  setInspectPlayer({ player: p, side })
+                }}
+                className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-xs p-3 rounded-xl flex items-center justify-between transition active:scale-95"
+              >
+                <div className="flex items-center gap-2">
+                  <Eye size={15} className="text-sky-400" />
+                  <span>Büyük FUT Kartını İncele</span>
+                </div>
+                <span className="text-[10px] text-sky-400">Detay</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setSlotActionMenu(null)}
+              className="w-full bg-slate-950 text-slate-400 hover:text-white text-xs font-bold py-2 rounded-xl"
+            >
+              Vazgeç
+            </button>
           </div>
         </div>
       )}

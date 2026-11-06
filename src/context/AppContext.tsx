@@ -19,7 +19,6 @@ import {
   INITIAL_GOALS,
 } from '../lib/mockData'
 import { generateSlotsForFormation, PRESET_FORMATIONS } from '../lib/formations'
-import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 interface AppContextType {
   isAdmin: boolean
@@ -48,6 +47,8 @@ interface AppContextType {
     source: { type: 'slot'; side: TeamSide; slotIndex: number; playerId: string | null } | { type: 'extra'; playerId: string },
     target: { type: 'slot'; side: TeamSide; slotIndex: number; playerId: string | null } | { type: 'extra' }
   ) => void
+  assignPlayerToSlot: (playerId: string, side: TeamSide, slotIndex: number) => void
+  removePlayerFromSlot: (side: TeamSide, slotIndex: number) => void
   changeFormation: (side: TeamSide, lines: number[]) => void
   changeMatchFormat: (playerCountPerTeam: number) => void
   clearPitchToRibbon: () => void
@@ -93,7 +94,6 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null)
 
-// localStorage yardımcı fonksiyonu
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
     const item = localStorage.getItem(`halisaha_${key}`)
@@ -113,7 +113,6 @@ function saveToStorage<T>(key: string, value: T): void {
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Kalıcı State'ler (Sayfa yenilense de ASLA kaybolmaz)
   const [isAdmin, setIsAdmin] = useState<boolean>(() => loadFromStorage('isAdmin', true))
   const [isVisitorPreview, setIsVisitorPreview] = useState<boolean>(false)
   const effectiveIsAdmin = isAdmin && !isVisitorPreview
@@ -155,7 +154,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { A: slotsA, B: slotsB }
   })
 
-  // HER DEĞİŞİKLİKTE OTOMATİK LOCALSTORAGE KAYDI (SAYFA YENİLENSE DE KALICI)
+  // KALICI LOCALSTORAGE SENKRONİZASYONU
   useEffect(() => { saveToStorage('isAdmin', isAdmin) }, [isAdmin])
   useEffect(() => { saveToStorage('format', currentFormat) }, [currentFormat])
   useEffect(() => { saveToStorage('teams', teams) }, [teams])
@@ -167,7 +166,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { saveToStorage('powerHistory', powerHistory) }, [powerHistory])
   useEffect(() => { saveToStorage('lineupSlots', lineupSlots) }, [lineupSlots])
 
-  // Sahada olan oyuncuların id kümesi
+  // Sahadaki oyuncu id'leri
   const assignedPlayerIds = new Set<string>()
   lineupSlots.A.forEach(s => s.player_id && assignedPlayerIds.add(s.player_id))
   lineupSlots.B.forEach(s => s.player_id && assignedPlayerIds.add(s.player_id))
@@ -258,7 +257,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).sort((a, b) => b.total_goals - a.total_goals || b.total_assists - a.total_assists)
   }, [players, goals, matches])
 
-  // ================= KADRO DEĞİŞİKLİĞİ =================
+  // ================= KADRO DEĞİŞİKLİĞİ (GÜVENLİ & IMMUTABLE) =================
   const swapOrAssignSlot: AppContextType['swapOrAssignSlot'] = (source, target) => {
     if (activeMatch) {
       alert('Maç oynanırken kadro değiştirilemez!')
@@ -266,26 +265,74 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setLineupSlots(prev => {
-      const nextA = [...prev.A]
-      const nextB = [...prev.B]
-      const getList = (side: TeamSide) => (side === 'A' ? nextA : nextB)
+      const nextA = prev.A.map(s => ({ ...s }))
+      const nextB = prev.B.map(s => ({ ...s }))
 
       if (source.type === 'slot' && target.type === 'slot') {
-        const sourceList = getList(source.side)
-        const targetList = getList(target.side)
-        const sourcePlayerId = sourceList[source.slotIndex].player_id
-        const targetPlayerId = targetList[target.slotIndex].player_id
-        sourceList[source.slotIndex].player_id = targetPlayerId
-        targetList[target.slotIndex].player_id = sourcePlayerId
+        const sourceList = source.side === 'A' ? nextA : nextB
+        const targetList = target.side === 'A' ? nextA : nextB
+
+        const sourceSlot = sourceList.find(s => s.slot_index === source.slotIndex)
+        const targetSlot = targetList.find(s => s.slot_index === target.slotIndex)
+
+        if (sourceSlot && targetSlot) {
+          const temp = sourceSlot.player_id
+          sourceSlot.player_id = targetSlot.player_id
+          targetSlot.player_id = temp
+        }
       } else if (source.type === 'extra' && target.type === 'slot') {
-        const targetList = getList(target.side)
-        targetList[target.slotIndex].player_id = source.playerId
+        nextA.forEach(s => { if (s.player_id === source.playerId) s.player_id = null })
+        nextB.forEach(s => { if (s.player_id === source.playerId) s.player_id = null })
+        const targetList = target.side === 'A' ? nextA : nextB
+        const targetSlot = targetList.find(s => s.slot_index === target.slotIndex)
+        if (targetSlot) {
+          targetSlot.player_id = source.playerId
+        }
       } else if (source.type === 'slot' && target.type === 'extra') {
-        const sourceList = getList(source.side)
-        sourceList[source.slotIndex].player_id = null
+        const sourceList = source.side === 'A' ? nextA : nextB
+        const sourceSlot = sourceList.find(s => s.slot_index === source.slotIndex)
+        if (sourceSlot) {
+          sourceSlot.player_id = null
+        }
       }
 
       return { A: nextA, B: nextB }
+    })
+  }
+
+  // Doğrudan Slota Oyuncu Atama
+  const assignPlayerToSlot = (playerId: string, side: TeamSide, slotIndex: number) => {
+    if (activeMatch) return
+    setLineupSlots(prev => {
+      const nextA = prev.A.map(s => ({
+        ...s,
+        player_id: s.player_id === playerId ? null : s.player_id
+      }))
+      const nextB = prev.B.map(s => ({
+        ...s,
+        player_id: s.player_id === playerId ? null : s.player_id
+      }))
+      const targetSide = side === 'A' ? nextA : nextB
+      const targetSlot = targetSide.find(s => s.slot_index === slotIndex)
+      if (targetSlot) {
+        targetSlot.player_id = playerId
+      }
+      return { A: nextA, B: nextB }
+    })
+  }
+
+  // Slottan Oyuncuyu Çıkarma (Yedeğe Alma)
+  const removePlayerFromSlot = (side: TeamSide, slotIndex: number) => {
+    if (activeMatch) return
+    setLineupSlots(prev => {
+      const targetSide = side === 'A' ? 'A' : 'B'
+      const updatedList = prev[targetSide].map(s => {
+        if (s.slot_index === slotIndex) {
+          return { ...s, player_id: null }
+        }
+        return s
+      })
+      return { ...prev, [targetSide]: updatedList }
     })
   }
 
@@ -675,7 +722,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     URL.revokeObjectURL(url)
   }
 
-  // Fabrika Ayarlarına Sıfırlama
   const resetToDefaultData = () => {
     if (!confirm('Tüm özel verileriniz silinip örnek başlangıç verilerine dönülecek. Emin misiniz?')) return
     localStorage.clear()
@@ -705,6 +751,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         playerStats,
         powerHistory,
         swapOrAssignSlot,
+        assignPlayerToSlot,
+        removePlayerFromSlot,
         changeFormation,
         changeMatchFormat,
         clearPitchToRibbon,
