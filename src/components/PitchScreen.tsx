@@ -17,7 +17,8 @@ import {
   LogOut,
   Eye,
   Check,
-  Sparkles,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 
 export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () => {
@@ -46,6 +47,12 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
 
   const pitchRef = useRef<HTMLDivElement>(null)
   const extraRibbonRef = useRef<HTMLDivElement>(null)
+
+  // Saha Görünümü: Tüm Saha / Sadece Takım A / Sadece Takım B
+  const [pitchView, setPitchView] = useState<'all' | 'A' | 'B'>('all')
+
+  // Yedek Şeridini Küçültme/Gizleme (Ekran alanını sahaya kazandırır)
+  const [isRibbonCollapsed, setIsRibbonCollapsed] = useState(false)
 
   // Seçili kart (ekstra şeritten veya sahadan)
   const [selectedItem, setSelectedItem] = useState<
@@ -216,36 +223,36 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
         </div>
       )}
 
-      {/* ================= ÜST AKSİYON BARI (KADRO / MAÇ BAŞLAT / FORMAT) ================= */}
-      <div className="bg-slate-900/90 border-b border-slate-800 px-3 py-2 flex items-center justify-between z-30 shadow-md">
+      {/* ================= ÜST AKSİYON BARI ================= */}
+      <div className="bg-slate-900/95 border-b border-slate-800 px-3 py-1.5 flex items-center justify-between z-30 shadow-md">
         
         {/* Sol: Başlık veya Canlı Maç Göstergesi */}
         <div className="flex items-center gap-2">
-          <span className="fut-font text-lg font-black tracking-wider bg-gradient-to-r from-amber-400 via-yellow-200 to-amber-500 bg-clip-text text-transparent">
+          <span className="fut-font text-base sm:text-lg font-black tracking-wider bg-gradient-to-r from-amber-400 via-yellow-200 to-amber-500 bg-clip-text text-transparent">
             FUT.KADRO
           </span>
           {activeMatch ? (
-            <span className="flex items-center gap-1 bg-red-950/80 border border-red-600/50 text-red-400 text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse">
+            <span className="flex items-center gap-1 bg-red-950/80 border border-red-600/50 text-red-400 text-[9px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-              CANLI MAÇ
+              CANLI
             </span>
           ) : (
-            <span className="bg-slate-800 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+            <span className="bg-slate-800 text-emerald-400 text-[9px] font-bold px-1.5 py-0.2 rounded-full border border-emerald-500/30">
               HAZIRLIK
             </span>
           )}
         </div>
 
         {/* Sağ: Aksiyon Butonları */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {/* Kadroyu Paylaş Butonu */}
           <button
             onClick={handleShare}
             disabled={isExporting}
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2.5 py-1.5 rounded-xl text-xs font-bold transition shadow-sm active:scale-95 disabled:opacity-50"
+            className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2 py-1 rounded-lg text-xs font-bold transition shadow-sm active:scale-95 disabled:opacity-50"
             title="Kadro görselini WhatsApp / Instagram için indir veya paylaş"
           >
-            <Share2 size={13} className="text-amber-400" />
+            <Share2 size={12} className="text-amber-400" />
             <span className="hidden sm:inline">Paylaş</span>
           </button>
 
@@ -254,10 +261,10 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
             activeMatch ? (
               <button
                 onClick={cancelMatch}
-                className="flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition shadow-lg active:scale-95"
+                className="flex items-center gap-1 bg-red-600 hover:bg-red-500 text-white px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition shadow-lg active:scale-95"
               >
-                <X size={13} />
-                <span>İptal Et</span>
+                <X size={12} />
+                <span>İptal</span>
               </button>
             ) : (
               <button
@@ -266,9 +273,9 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
                   setMatchTeamBName(teams[1]?.name || 'Güney FC')
                   setShowStartMatchModal(true)
                 }}
-                className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition shadow-lg shadow-amber-500/20 active:scale-95"
+                className="flex items-center gap-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition shadow-lg shadow-amber-500/20 active:scale-95"
               >
-                <Play size={13} fill="currentColor" />
+                <Play size={12} fill="currentColor" />
                 <span>BAŞLAT</span>
               </button>
             )
@@ -277,307 +284,394 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
 
       </div>
 
-      {/* ================= FORMAT SEÇİCİ & SAHAYI BOŞALT BARI ================= */}
-      {effectiveIsAdmin && !activeMatch && (
-        <div className="bg-slate-900/60 border-b border-slate-800/80 px-3 py-1.5 flex items-center justify-between text-xs z-20">
-          
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mr-1">FORMAT:</span>
-            {[5, 6, 7, 8].map(count => (
-              <button
-                key={count}
-                onClick={() => changeMatchFormat(count)}
-                className={`
-                  px-2 py-0.5 rounded-md text-[11px] font-black transition
-                  ${currentFormat === count
-                    ? 'bg-amber-400 text-slate-950 shadow-sm'
-                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}
-                `}
-              >
-                {count}v{count}
-              </button>
-            ))}
-          </div>
+      {/* ================= GÖRÜNÜM SEÇİCİ, FORMAT & SAHAYI BOŞALT BARI ================= */}
+      <div className="bg-slate-900/80 border-b border-slate-800/80 px-2.5 py-1 flex items-center justify-between text-xs z-20 gap-1 overflow-x-auto no-scrollbar">
+        
+        {/* Takım Odak Tabları: Tüm Saha / Takım A / Takım B */}
+        <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 flex-shrink-0">
+          <button
+            onClick={() => setPitchView('all')}
+            className={`px-2 py-0.5 rounded-md text-[10px] font-black transition ${pitchView === 'all' ? 'bg-amber-400 text-slate-950 shadow' : 'text-slate-400 hover:text-white'}`}
+          >
+            Tüm Saha
+          </button>
+          <button
+            onClick={() => setPitchView('A')}
+            className={`px-2 py-0.5 rounded-md text-[10px] font-black transition ${pitchView === 'A' ? 'bg-sky-500 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+          >
+            {teams[0]?.name || 'Takım A'}
+          </button>
+          <button
+            onClick={() => setPitchView('B')}
+            className={`px-2 py-0.5 rounded-md text-[10px] font-black transition ${pitchView === 'B' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'}`}
+          >
+            {teams[1]?.name || 'Takım B'}
+          </button>
+        </div>
 
-          <div className="flex items-center gap-1">
+        {/* Format Seçici & Sahayı Boşalt */}
+        {effectiveIsAdmin && !activeMatch && (
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex items-center gap-0.5 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+              {[5, 6, 7, 8].map(count => (
+                <button
+                  key={count}
+                  onClick={() => changeMatchFormat(count)}
+                  className={`
+                    px-1.5 py-0.5 rounded text-[10px] font-black transition
+                    ${currentFormat === count
+                      ? 'bg-amber-400 text-slate-950'
+                      : 'text-slate-400 hover:text-slate-200'}
+                  `}
+                >
+                  {count}v{count}
+                </button>
+              ))}
+            </div>
+
             <button
               onClick={clearPitchToRibbon}
-              className="flex items-center gap-1 bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 px-2.5 py-1 rounded-md text-[10px] font-bold transition shadow-sm active:scale-95"
+              className="flex items-center gap-1 bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 px-2 py-0.5 rounded-lg text-[10px] font-bold transition shadow-sm active:scale-95"
               title="Tüm oyuncuları sahadan çıkarıp alt yedek şeridine alır"
             >
               <Eraser size={11} className="text-amber-400" />
-              <span>Sahayı Boşalt</span>
+              <span>Boşalt</span>
             </button>
           </div>
+        )}
 
-        </div>
-      )}
+      </div>
 
       {/* Sayı Eşit Değilse Uyarı Rozeti */}
       {isUneven && (
-        <div className="bg-amber-950/70 border-b border-amber-600/30 px-3 py-1 text-center text-[10px] text-amber-300 font-bold flex items-center justify-center gap-1.5">
-          <AlertCircle size={12} />
-          <span>Kadro dengesi: Takım A ({onPitchA} kişi) - Takım B ({onPitchB} kişi)</span>
+        <div className="bg-amber-950/70 border-b border-amber-600/30 px-3 py-0.5 text-center text-[10px] text-amber-300 font-bold flex items-center justify-center gap-1.5 z-20">
+          <AlertCircle size={11} />
+          <span>Kadro dengesi: {teams[0]?.name} ({onPitchA}) - {teams[1]?.name} ({onPitchB})</span>
         </div>
       )}
 
-      {/* ================= GERÇEKÇİ STADYUM SAHASI (3D & PROJEKTÖR ETKİSİ) ================= */}
-      <div
-        ref={pitchRef}
-        className="flex-1 stadium-pitch relative flex flex-col justify-between p-2 overflow-hidden border-x border-emerald-600/30 select-none"
-      >
-        {/* Saha Dış Sınır Çizgisi */}
-        <div className="absolute inset-1.5 border border-white/35 pointer-events-none rounded-sm"></div>
+      {/* ================= GERÇEKÇİ STADYUM SAHASI (DİKEY KAYDIRILABİLİR ALAN) ================= */}
+      <div className="flex-1 overflow-y-auto overscroll-contain relative no-scrollbar">
+        <div
+          ref={pitchRef}
+          className={`
+            stadium-pitch relative flex flex-col justify-between p-2 border-x border-emerald-600/30 select-none
+            ${pitchView === 'all' ? 'min-h-[580px] sm:min-h-[640px]' : 'min-h-[380px] h-full'}
+          `}
+        >
+          {/* Saha Dış Sınır Çizgisi */}
+          <div className="absolute inset-1.5 border border-white/35 pointer-events-none rounded-sm"></div>
 
-        {/* Saha Orta Çizgisi, Çemberi ve Noktası */}
-        <div className="absolute top-1/2 left-1.5 right-1.5 h-[2px] pitch-line -translate-y-1/2 z-0 pointer-events-none"></div>
-        <div className="absolute top-1/2 left-1/2 w-24 h-24 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/35 z-0 pointer-events-none"></div>
-        <div className="absolute top-1/2 left-1/2 w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/70 z-0 pointer-events-none shadow-[0_0_6px_#ffffff]"></div>
+          {/* Saha Orta Çizgisi ve Çemberi (Tüm Saha Modunda) */}
+          {pitchView === 'all' && (
+            <>
+              <div className="absolute top-1/2 left-1.5 right-1.5 h-[2px] pitch-line -translate-y-1/2 z-0 pointer-events-none"></div>
+              <div className="absolute top-1/2 left-1/2 w-20 h-20 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/35 z-0 pointer-events-none"></div>
+              <div className="absolute top-1/2 left-1/2 w-2 h-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/70 z-0 pointer-events-none shadow-[0_0_6px_#ffffff]"></div>
+              <div className="absolute top-[36px] left-1/2 -translate-x-1/2 w-14 h-7 border-b-2 border-white/35 rounded-b-full pointer-events-none z-0"></div>
+              <div className="absolute bottom-[36px] left-1/2 -translate-x-1/2 w-14 h-7 border-t-2 border-white/35 rounded-t-full pointer-events-none z-0"></div>
+            </>
+          )}
 
-        {/* Üst Ceza Yayı (D-Box Arc) */}
-        <div className="absolute top-[38px] left-1/2 -translate-x-1/2 w-16 h-8 border-b-2 border-white/35 rounded-b-full pointer-events-none z-0"></div>
-
-        {/* Alt Ceza Yayı (D-Box Arc) */}
-        <div className="absolute bottom-[38px] left-1/2 -translate-x-1/2 w-16 h-8 border-t-2 border-white/35 rounded-t-full pointer-events-none z-0"></div>
-
-        {/* ============ TAKIM A (ÜST YARI) ============ */}
-        <div className="relative z-10 flex flex-col flex-1 pb-1">
-          
-          {/* Takım A Başlığı & Güç Kartı */}
-          <div className="flex items-center justify-between bg-black/65 backdrop-blur-md px-2.5 py-1 rounded-xl border border-sky-500/40 mb-0.5 shadow-lg">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
-              <span className="text-xs font-black tracking-wide text-sky-200 uppercase">{teams[0]?.name || 'Takım A'}</span>
-              {effectiveIsAdmin && !activeMatch && (
-                <button
-                  onClick={() => setFormationModalSide('A')}
-                  className="flex items-center gap-1 text-[9px] text-slate-300 bg-white/10 hover:bg-white/20 px-1.5 py-0.5 rounded-md font-bold transition"
-                >
-                  <span>{teams[0]?.formation.slice(1).join('-')}</span>
-                  <Sliders size={9} />
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">OVR</span>
-              <span className="fut-font text-xl text-emerald-400 font-black">{teamA_Average}</span>
-            </div>
-          </div>
-
-          {/* Üst Ceza Sahası & Kale Ağı */}
-          <div className="w-36 h-6 border-b-2 border-x-2 border-white/35 mx-auto -mt-0.5 mb-1 bg-white/5 goal-net relative pointer-events-none">
-            {/* Penaltı Noktası */}
-            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-white/70 shadow-[0_0_4px_#ffffff]"></div>
-          </div>
-
-          <div className="flex-1 flex flex-col justify-around py-0.5">
-            {Object.keys(linesA).map(lineIdxStr => {
-              const lineIdx = Number(lineIdxStr)
-              const slotsInLine = linesA[lineIdx]
-              return (
-                <div key={`line-a-${lineIdx}`} className="flex justify-around items-center px-1">
-                  {slotsInLine.map(slot => {
-                    const player = players.find(p => p.id === slot.player_id)
-                    const isSelected =
-                      selectedItem?.type === 'slot' &&
-                      selectedItem.side === 'A' &&
-                      selectedItem.slotIndex === slot.slot_index
-
-                    return (
-                      <div
-                        key={slot.id}
-                        className="relative touch-manipulation"
-                      >
-                        {player ? (
-                          <FifaCard
-                            player={player}
-                            size="mini"
-                            positionLabel={slot.position_label}
-                            isSelected={isSelected}
-                            teamSide="A"
-                            onClick={() => handleSlotClick('A', slot.slot_index, player.id)}
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleSlotClick('A', slot.slot_index, null)}
-                            className={`
-                              w-[54px] h-[68px] fut-shield-mini border-2 border-dashed
-                              flex flex-col items-center justify-center
-                              transition-all active:scale-95 touch-manipulation cursor-pointer select-none
-                              ${isSelected
-                                ? 'border-emerald-400 bg-emerald-950/60 shadow-[0_0_12px_#10b981]'
-                                : selectedItem
-                                ? 'border-amber-400/80 bg-amber-950/30 animate-pulse hover:bg-amber-900/40'
-                                : 'border-white/40 bg-black/40 hover:bg-white/10'}
-                            `}
-                          >
-                            <span className="text-[11px] font-black text-slate-200 tracking-wider">
-                              {slot.position_label}
-                            </span>
-                            <span className="text-[8px] text-amber-400 font-bold uppercase mt-0.5">
-                              {selectedItem ? 'Buraya Koy' : '+ Boş'}
-                            </span>
-                          </button>
-                        )}
-                      </div>
-                    )
-                  })}
+          {/* ============ TAKIM A (ÜST YARI) ============ */}
+          {(pitchView === 'all' || pitchView === 'A') && (
+            <div className="relative z-10 flex flex-col flex-1 pb-1">
+              
+              {/* Takım A Başlığı & Güç Kartı */}
+              <div className="flex items-center justify-between bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-xl border border-sky-500/40 mb-0.5 shadow-lg">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
+                  <span className="text-xs font-black tracking-wide text-sky-200 uppercase">{teams[0]?.name || 'Takım A'}</span>
+                  {effectiveIsAdmin && !activeMatch && (
+                    <button
+                      onClick={() => setFormationModalSide('A')}
+                      className="flex items-center gap-1 text-[9px] text-slate-300 bg-white/10 hover:bg-white/20 px-1.5 py-0.5 rounded-md font-bold transition"
+                    >
+                      <span>{teams[0]?.formation.slice(1).join('-')}</span>
+                      <Sliders size={9} />
+                    </button>
+                  )}
                 </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* ============ TAKIM B (ALT YARI) ============ */}
-        <div className="relative z-10 flex flex-col flex-1 pt-1 justify-between">
-          <div className="flex-1 flex flex-col justify-around py-0.5">
-            {Object.keys(linesB).reverse().map(lineIdxStr => {
-              const lineIdx = Number(lineIdxStr)
-              const slotsInLine = linesB[lineIdx]
-              return (
-                <div key={`line-b-${lineIdx}`} className="flex justify-around items-center px-1">
-                  {slotsInLine.map(slot => {
-                    const player = players.find(p => p.id === slot.player_id)
-                    const isSelected =
-                      selectedItem?.type === 'slot' &&
-                      selectedItem.side === 'B' &&
-                      selectedItem.slotIndex === slot.slot_index
-
-                    return (
-                      <div
-                        key={slot.id}
-                        className="relative touch-manipulation"
-                      >
-                        {player ? (
-                          <FifaCard
-                            player={player}
-                            size="mini"
-                            positionLabel={slot.position_label}
-                            isSelected={isSelected}
-                            teamSide="B"
-                            onClick={() => handleSlotClick('B', slot.slot_index, player.id)}
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleSlotClick('B', slot.slot_index, null)}
-                            className={`
-                              w-[54px] h-[68px] fut-shield-mini border-2 border-dashed
-                              flex flex-col items-center justify-center
-                              transition-all active:scale-95 touch-manipulation cursor-pointer select-none
-                              ${isSelected
-                                ? 'border-emerald-400 bg-emerald-950/60 shadow-[0_0_12px_#10b981]'
-                                : selectedItem
-                                ? 'border-amber-400/80 bg-amber-950/30 animate-pulse hover:bg-amber-900/40'
-                                : 'border-white/40 bg-black/40 hover:bg-white/10'}
-                            `}
-                          >
-                            <span className="text-[11px] font-black text-slate-200 tracking-wider">
-                              {slot.position_label}
-                            </span>
-                            <span className="text-[8px] text-amber-400 font-bold uppercase mt-0.5">
-                              {selectedItem ? 'Buraya Koy' : '+ Boş'}
-                            </span>
-                          </button>
-                        )}
-                      </div>
-                    )
-                  })}
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">OVR</span>
+                  <span className="fut-font text-lg text-emerald-400 font-black">{teamA_Average}</span>
                 </div>
-              )
-            })}
-          </div>
+              </div>
 
-          {/* Alt Ceza Sahası & Kale Ağı */}
-          <div className="w-36 h-6 border-t-2 border-x-2 border-white/35 mx-auto mt-1 -mb-0.5 bg-white/5 goal-net relative pointer-events-none">
-            {/* Penaltı Noktası */}
-            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-white/70 shadow-[0_0_4px_#ffffff]"></div>
-          </div>
+              {/* Üst Ceza Sahası & Kale Ağı */}
+              <div className="w-32 h-5 border-b-2 border-x-2 border-white/35 mx-auto -mt-0.5 mb-1 bg-white/5 goal-net relative pointer-events-none">
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-white/70 shadow-[0_0_4px_#ffffff]"></div>
+              </div>
 
-          <div className="flex items-center justify-between bg-black/65 backdrop-blur-md px-2.5 py-1 rounded-xl border border-amber-500/40 mt-0.5 shadow-lg">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#f59e0b]"></span>
-              <span className="text-xs font-black tracking-wide text-amber-200 uppercase">{teams[1]?.name || 'Takım B'}</span>
-              {effectiveIsAdmin && !activeMatch && (
-                <button
-                  onClick={() => setFormationModalSide('B')}
-                  className="flex items-center gap-1 text-[9px] text-slate-300 bg-white/10 hover:bg-white/20 px-1.5 py-0.5 rounded-md font-bold transition"
-                >
-                  <span>{teams[1]?.formation.slice(1).join('-')}</span>
-                  <Sliders size={9} />
-                </button>
+              <div className="flex-1 flex flex-col justify-around py-0.5 gap-1">
+                {Object.keys(linesA).map(lineIdxStr => {
+                  const lineIdx = Number(lineIdxStr)
+                  const slotsInLine = linesA[lineIdx]
+                  return (
+                    <div key={`line-a-${lineIdx}`} className="flex justify-around items-center px-0.5">
+                      {slotsInLine.map(slot => {
+                        const player = players.find(p => p.id === slot.player_id)
+                        const isSelected =
+                          selectedItem?.type === 'slot' &&
+                          selectedItem.side === 'A' &&
+                          selectedItem.slotIndex === slot.slot_index
+
+                        return (
+                          <div
+                            key={slot.id}
+                            className="relative touch-manipulation"
+                          >
+                            {player ? (
+                              <FifaCard
+                                player={player}
+                                size="mini"
+                                positionLabel={slot.position_label}
+                                isSelected={isSelected}
+                                teamSide="A"
+                                onClick={() => handleSlotClick('A', slot.slot_index, player.id)}
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleSlotClick('A', slot.slot_index, null)}
+                                className={`
+                                  w-[45px] h-[58px] sm:w-[52px] sm:h-[66px] fut-shield-mini border-2 border-dashed
+                                  flex flex-col items-center justify-center
+                                  transition-all active:scale-95 touch-manipulation cursor-pointer select-none
+                                  ${isSelected
+                                    ? 'border-emerald-400 bg-emerald-950/60 shadow-[0_0_12px_#10b981]'
+                                    : selectedItem
+                                    ? 'border-amber-400/80 bg-amber-950/30 animate-pulse hover:bg-amber-900/40'
+                                    : 'border-white/40 bg-black/40 hover:bg-white/10'}
+                                `}
+                              >
+                                <span className="text-[10px] font-black text-slate-200 tracking-wider">
+                                  {slot.position_label}
+                                </span>
+                                <span className="text-[7.5px] text-amber-400 font-bold uppercase mt-0.5 leading-none">
+                                  {selectedItem ? 'Koy' : '+ Boş'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ============ TAKIM B (ALT YARI) ============ */}
+          {(pitchView === 'all' || pitchView === 'B') && (
+            <div className="relative z-10 flex flex-col flex-1 pt-1 justify-between">
+              
+              {/* Tek Takım Görünümündeyse Başlığı Üstte Göster */}
+              {pitchView === 'B' && (
+                <div className="flex items-center justify-between bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-xl border border-amber-500/40 mb-1 shadow-lg">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#f59e0b]"></span>
+                    <span className="text-xs font-black tracking-wide text-amber-200 uppercase">{teams[1]?.name || 'Takım B'}</span>
+                    {effectiveIsAdmin && !activeMatch && (
+                      <button
+                        onClick={() => setFormationModalSide('B')}
+                        className="flex items-center gap-1 text-[9px] text-slate-300 bg-white/10 hover:bg-white/20 px-1.5 py-0.5 rounded-md font-bold transition"
+                      >
+                        <span>{teams[1]?.formation.slice(1).join('-')}</span>
+                        <Sliders size={9} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">OVR</span>
+                    <span className="fut-font text-lg text-emerald-400 font-black">{teamB_Average}</span>
+                  </div>
+                </div>
               )}
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">OVR</span>
-              <span className="fut-font text-xl text-emerald-400 font-black">{teamB_Average}</span>
-            </div>
-          </div>
-        </div>
 
+              <div className="flex-1 flex flex-col justify-around py-0.5 gap-1">
+                {Object.keys(linesB).reverse().map(lineIdxStr => {
+                  const lineIdx = Number(lineIdxStr)
+                  const slotsInLine = linesB[lineIdx]
+                  return (
+                    <div key={`line-b-${lineIdx}`} className="flex justify-around items-center px-0.5">
+                      {slotsInLine.map(slot => {
+                        const player = players.find(p => p.id === slot.player_id)
+                        const isSelected =
+                          selectedItem?.type === 'slot' &&
+                          selectedItem.side === 'B' &&
+                          selectedItem.slotIndex === slot.slot_index
+
+                        return (
+                          <div
+                            key={slot.id}
+                            className="relative touch-manipulation"
+                          >
+                            {player ? (
+                              <FifaCard
+                                player={player}
+                                size="mini"
+                                positionLabel={slot.position_label}
+                                isSelected={isSelected}
+                                teamSide="B"
+                                onClick={() => handleSlotClick('B', slot.slot_index, player.id)}
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleSlotClick('B', slot.slot_index, null)}
+                                className={`
+                                  w-[45px] h-[58px] sm:w-[52px] sm:h-[66px] fut-shield-mini border-2 border-dashed
+                                  flex flex-col items-center justify-center
+                                  transition-all active:scale-95 touch-manipulation cursor-pointer select-none
+                                  ${isSelected
+                                    ? 'border-emerald-400 bg-emerald-950/60 shadow-[0_0_12px_#10b981]'
+                                    : selectedItem
+                                    ? 'border-amber-400/80 bg-amber-950/30 animate-pulse hover:bg-amber-900/40'
+                                    : 'border-white/40 bg-black/40 hover:bg-white/10'}
+                                `}
+                              >
+                                <span className="text-[10px] font-black text-slate-200 tracking-wider">
+                                  {slot.position_label}
+                                </span>
+                                <span className="text-[7.5px] text-amber-400 font-bold uppercase mt-0.5 leading-none">
+                                  {selectedItem ? 'Koy' : '+ Boş'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Alt Ceza Sahası & Kale Ağı */}
+              <div className="w-32 h-5 border-t-2 border-x-2 border-white/35 mx-auto mt-1 -mb-0.5 bg-white/5 goal-net relative pointer-events-none">
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-white/70 shadow-[0_0_4px_#ffffff]"></div>
+              </div>
+
+              {/* Tüm Saha Modunda Takım B Başlığı En Altta */}
+              {pitchView === 'all' && (
+                <div className="flex items-center justify-between bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-xl border border-amber-500/40 mt-0.5 shadow-lg">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#f59e0b]"></span>
+                    <span className="text-xs font-black tracking-wide text-amber-200 uppercase">{teams[1]?.name || 'Takım B'}</span>
+                    {effectiveIsAdmin && !activeMatch && (
+                      <button
+                        onClick={() => setFormationModalSide('B')}
+                        className="flex items-center gap-1 text-[9px] text-slate-300 bg-white/10 hover:bg-white/20 px-1.5 py-0.5 rounded-md font-bold transition"
+                      >
+                        <span>{teams[1]?.formation.slice(1).join('-')}</span>
+                        <Sliders size={9} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">OVR</span>
+                    <span className="fut-font text-lg text-emerald-400 font-black">{teamB_Average}</span>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
+
+        </div>
       </div>
 
       {/* ================= SEÇİLEN YEDEK OYUNCU YÜZEN BİLDİRİMİ ================= */}
       {selectedExtraPlayer && (
-        <div className="bg-emerald-950 border-t border-emerald-500 px-3 py-2 flex items-center justify-between text-xs text-white z-30 shadow-lg animate-in slide-in-from-bottom-2">
+        <div className="bg-emerald-950 border-t border-emerald-500 px-3 py-1.5 flex items-center justify-between text-xs text-white z-30 shadow-lg">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
             <div>
               <span className="font-black text-amber-300">{selectedExtraPlayer.full_name}</span>
-              <span className="text-[10px] text-emerald-300 ml-1.5 font-bold">({selectedExtraPlayer.position} - {selectedExtraPlayer.power})</span>
-              <span className="text-[10px] text-slate-200 block sm:inline sm:ml-2">Sahada istediğin slota dokun!</span>
+              <span className="text-[10px] text-emerald-300 ml-1 font-bold">({selectedExtraPlayer.position} - {selectedExtraPlayer.power})</span>
+              <span className="text-[10px] text-slate-300 ml-1.5">seçildi. Sahadaki slota dokun!</span>
             </div>
           </div>
           <button
             onClick={() => setSelectedItem(null)}
-            className="bg-emerald-800 hover:bg-emerald-700 text-white text-[10px] px-2.5 py-1 rounded-lg font-bold"
+            className="bg-emerald-800 hover:bg-emerald-700 text-white text-[10px] px-2 py-0.5 rounded font-bold"
           >
-            Seçimi İptal Et
+            İptal
           </button>
         </div>
       )}
 
-      {/* ================= ALT EKSTRA ŞERİT (DOKUNMA VE YATAY KAYDIRMA) ================= */}
+      {/* ================= ALT EKSTRA ŞERİT (KÜÇÜLTÜLEBİLİR & YATAY KAYDIRMALI) ================= */}
       {extraPlayers.length > 0 && (
-        <div className="bg-slate-950/95 border-t border-slate-800 px-3 py-2 z-20 shadow-2xl">
-          <div className="flex items-center justify-between mb-1.5">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-black uppercase tracking-widest text-amber-400">
-                Yedek / Ekstra Şerit ({extraPlayers.length})
+        isRibbonCollapsed ? (
+          <div className="bg-slate-950 border-t border-slate-800 px-3 py-1 z-20 flex items-center justify-between shadow-2xl">
+            <div className="flex items-center gap-2 truncate">
+              <span className="text-[10px] font-black uppercase text-amber-400 flex-shrink-0">
+                Yedekler ({extraPlayers.length}):
               </span>
-              <span className="text-[9px] text-slate-400 bg-slate-900 border border-slate-800 px-1.5 py-0.2 rounded font-bold">
-                Kaydırılabilir ➔
+              <span className="text-[10px] text-slate-400 truncate">
+                {extraPlayers.map(p => `${p.full_name} (${p.position})`).join(', ')}
               </span>
             </div>
-            <span className="text-[9px] text-slate-400 font-medium">
-              {selectedItem ? 'Sahadaki boş slota dokun' : 'Sahaya koymak için tıkla'}
-            </span>
+            <button
+              onClick={() => setIsRibbonCollapsed(false)}
+              className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] px-2 py-0.5 rounded font-bold transition flex items-center gap-1 flex-shrink-0"
+            >
+              <span>Yedekleri Aç</span>
+              <ChevronUp size={12} />
+            </button>
           </div>
+        ) : (
+          <div className="bg-slate-950/95 border-t border-slate-800 px-3 py-1.5 z-20 shadow-2xl">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-400">
+                  Yedekler ({extraPlayers.length})
+                </span>
+                <span className="text-[9px] text-slate-400 bg-slate-900 border border-slate-800 px-1 py-0.2 rounded font-bold">
+                  Kaydır ➔
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] text-slate-400 font-medium">
+                  {selectedItem ? 'Sahadaki slota dokun' : 'Sahaya koymak için dokun'}
+                </span>
+                <button
+                  onClick={() => setIsRibbonCollapsed(true)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5 transition"
+                  title="Yedek şeridini gizle (sahaya yer açar)"
+                >
+                  <span>Gizle</span>
+                  <ChevronDown size={11} />
+                </button>
+              </div>
+            </div>
 
-          {/* Yatay Kaydırma Kutusu */}
-          <div
-            ref={extraRibbonRef}
-            className="flex items-center gap-2.5 overflow-x-auto pb-2 smooth-scroll-x no-scrollbar select-none"
-          >
-            {extraPlayers.map(player => {
-              const isSelected = selectedItem?.type === 'extra' && selectedItem.playerId === player.id
-              return (
-                <div key={player.id} className="flex-shrink-0 touch-manipulation">
-                  <FifaCard
-                    player={player}
-                    size="mini"
-                    isSelected={isSelected}
-                    onClick={() => handleExtraClick(player.id)}
-                  />
-                </div>
-              )
-            })}
+            {/* Yatay Kaydırma Kutusu */}
+            <div
+              ref={extraRibbonRef}
+              className="flex items-center gap-2 overflow-x-auto pb-1 smooth-scroll-x no-scrollbar select-none"
+            >
+              {extraPlayers.map(player => {
+                const isSelected = selectedItem?.type === 'extra' && selectedItem.playerId === player.id
+                return (
+                  <div key={player.id} className="flex-shrink-0 touch-manipulation">
+                    <FifaCard
+                      player={player}
+                      size="mini"
+                      isSelected={isSelected}
+                      onClick={() => handleExtraClick(player.id)}
+                    />
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        )
       )}
 
-      {/* ================= MODAL: DOĞRUDAN SLOTA OYUNCU SEÇİCİ (MOBİL İÇİN ÇOK PRATİK) ================= */}
+      {/* ================= MODAL: DOĞRUDAN SLOTA OYUNCU SEÇİCİ ================= */}
       {slotPicker && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
           <div className="bg-slate-900 border-t sm:border border-slate-800 rounded-t-3xl sm:rounded-2xl p-4 w-full max-w-md max-h-[85vh] flex flex-col shadow-2xl">
@@ -606,7 +700,6 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
               ) : (
                 [...extraPlayers]
                   .sort((a, b) => {
-                    // Mevkisi eşleşenleri en başa al
                     const aMatches = a.position === slotPicker.positionLabel ? 1 : 0
                     const bMatches = b.position === slotPicker.positionLabel ? 1 : 0
                     if (bMatches !== aMatches) return bMatches - aMatches
@@ -703,7 +796,6 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
             </div>
 
             <div className="space-y-2 mb-3">
-              {/* Başka Oyuncu Seç */}
               <button
                 onClick={() => {
                   const targetSide = slotActionMenu.side
@@ -725,7 +817,6 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
                 <span className="text-[10px] text-slate-400">Yedeklerden Seç ➔</span>
               </button>
 
-              {/* Yedeğe Çıkar */}
               <button
                 onClick={() => {
                   removePlayerFromSlot(slotActionMenu.side, slotActionMenu.slotIndex)
@@ -740,7 +831,6 @@ export const PitchScreen: React.FC<{ onNavigateToMatches?: () => void }> = () =>
                 <span className="text-[10px] text-red-400/80">Boşalt</span>
               </button>
 
-              {/* Büyük FUT Kartını İncele */}
               <button
                 onClick={() => {
                   const p = slotActionMenu.player

@@ -72,7 +72,7 @@ export const FifaCard: React.FC<FifaCardProps> = ({
       <div
         onClick={onClick}
         className={`
-          ${tierStyles.outer} p-[1.5px] fut-shield-mini w-[52px] h-[66px] shadow-lg
+          ${tierStyles.outer} p-[1.5px] fut-shield-mini w-[45px] h-[58px] sm:w-[52px] sm:h-[66px] shadow-lg
           cursor-pointer select-none relative transition-all duration-150 ease-out
           ${isShiny ? 'shimmer-effect' : ''}
           ${isSelected ? 'scale-110 ring-2 ring-emerald-400 shadow-[0_0_16px_#10b981] z-30' : 'hover:scale-105 active:scale-90'}
@@ -83,8 +83,8 @@ export const FifaCard: React.FC<FifaCardProps> = ({
           
           <div className="w-full flex items-start justify-between">
             <div className="flex flex-col items-center leading-none">
-              <span className={`fut-font text-[15px] font-bold ${tierStyles.textNum}`}>{player.power}</span>
-              <span className={`text-[7px] font-black ${tierStyles.textPos} -mt-0.5`}>{displayPos}</span>
+              <span className={`fut-font text-[13px] sm:text-[15px] font-bold ${tierStyles.textNum}`}>{player.power}</span>
+              <span className={`text-[6.5px] sm:text-[7px] font-black ${tierStyles.textPos} -mt-0.5`}>{displayPos}</span>
             </div>
             {teamSide && (
               <span 
@@ -93,7 +93,7 @@ export const FifaCard: React.FC<FifaCardProps> = ({
             )}
           </div>
 
-          <div className={`w-6 h-6 rounded-full bg-gradient-to-b ${tierStyles.avatarBorder} border flex items-center justify-center font-black text-[9px] overflow-hidden shadow-inner`}>
+          <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-b ${tierStyles.avatarBorder} border flex items-center justify-center font-black text-[8px] sm:text-[9px] overflow-hidden shadow-inner`}>
             {player.photo_url ? (
               <img src={player.photo_url} alt={player.full_name} className="w-full h-full object-cover" />
             ) : (
@@ -101,7 +101,7 @@ export const FifaCard: React.FC<FifaCardProps> = ({
             )}
           </div>
 
-          <div className="text-[8px] font-black uppercase tracking-tight truncate w-full text-center text-slate-100 pb-0.5 drop-shadow">
+          <div className="text-[7.5px] sm:text-[8px] font-black uppercase tracking-tight truncate w-full text-center text-slate-100 pb-0.5 drop-shadow leading-none">
             {shortName}
           </div>
 
