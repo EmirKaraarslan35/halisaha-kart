@@ -1,9 +1,9 @@
 -- ==============================================================================
--- HALI SAHA KART UYGULAMASI - TEK PARÇA SUPABASE KURULUM SQL'İ
+-- HALI SAHA KART UYGULAMASI - TEK PARÇA SUPABASE KURULUM SQL'İ (İDEMPOTENT / TEKRAR ÇALIŞTIRILABİLİR)
 -- ==============================================================================
 -- Bu dosyayı Supabase Dashboard -> SQL Editor alanına yapıştırıp "RUN" butonuna basarak
 -- tüm tabloları, kısıtları, RLS güvenlik kurallarını, view'ları ve storage ayarlarını
--- tek seferde oluşturabilirsiniz.
+-- tek seferde oluşturabilirsiniz. Defalarca çalıştırılsa bile hata vermez.
 -- ==============================================================================
 
 -- 1. EXTENSIONS
@@ -106,7 +106,6 @@ CREATE TABLE IF NOT EXISTS public.goals (
     is_own_goal BOOLEAN NOT NULL DEFAULT false,
     credited_side CHAR(1) NOT NULL CHECK (credited_side IN ('A', 'B')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- Bir oyuncu kendi golüne asist yapamaz
     CONSTRAINT chk_scorer_not_assist CHECK (assist_id IS NULL OR scorer_id <> assist_id)
 );
 
@@ -126,7 +125,6 @@ CREATE TABLE IF NOT EXISTS public.power_history (
 -- ==============================================================================
 -- 3. BAŞLANGIÇ VERİSİ (SEED DATA)
 -- ==============================================================================
--- Takım A ve Takım B sabit kayıtları (varsa dokunma)
 INSERT INTO public.teams (side, name, formation)
 VALUES 
     ('A', 'Kuzey FC (Takım A)', '[1, 2, 3, 1]'::jsonb),
@@ -137,7 +135,6 @@ ON CONFLICT (side) DO NOTHING;
 -- 4. HESAPLANAN VERİLER İÇİN SQL VIEW'LAR (Derived Stats)
 -- ==============================================================================
 
--- 4.1 Lig Puan Durumu View'ı (Her lig için Takım A ve Takım B satırları)
 CREATE OR REPLACE VIEW public.view_league_standings AS
 WITH finished_matches AS (
     SELECT 
@@ -178,7 +175,6 @@ LEFT JOIN finished_matches fm ON fm.league_id = l.id
 GROUP BY l.id, ts.side, t_a.name, t_b.name
 ORDER BY points DESC, goal_diff DESC, goals_for DESC;
 
--- 4.2 Oyuncu İstatistikleri View'ı
 CREATE OR REPLACE VIEW public.view_player_stats AS
 SELECT 
     p.id AS player_id,
@@ -202,10 +198,9 @@ LEFT JOIN public.matches m_mvp ON m_mvp.mvp_player_id = p.id AND m_mvp.status = 
 GROUP BY p.id;
 
 -- ==============================================================================
--- 5. ROW LEVEL SECURITY (RLS) POLİTİKALARI
+-- 5. ROW LEVEL SECURITY (RLS) POLİTİKALARI (ÖNCE TEMİZLE, SONRA OLUŞTUR)
 -- ==============================================================================
 
--- Tüm tablolarda RLS etkinleştir
 ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.players ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lineup_slots ENABLE ROW LEVEL SECURITY;
@@ -215,7 +210,26 @@ ALTER TABLE public.match_players ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.power_history ENABLE ROW LEVEL SECURITY;
 
--- 5.1 GENEL HERKESE AÇIK OKUMA (Ziyaretçiler SELECT yapabilir)
+-- 5.1 Eski Kuralları Temizle
+DROP POLICY IF EXISTS "Public read teams" ON public.teams;
+DROP POLICY IF EXISTS "Public read players" ON public.players;
+DROP POLICY IF EXISTS "Public read lineup_slots" ON public.lineup_slots;
+DROP POLICY IF EXISTS "Public read leagues" ON public.leagues;
+DROP POLICY IF EXISTS "Public read matches" ON public.matches;
+DROP POLICY IF EXISTS "Public read match_players" ON public.match_players;
+DROP POLICY IF EXISTS "Public read goals" ON public.goals;
+DROP POLICY IF EXISTS "Admin read power_history" ON public.power_history;
+
+DROP POLICY IF EXISTS "Admin write teams" ON public.teams;
+DROP POLICY IF EXISTS "Admin write players" ON public.players;
+DROP POLICY IF EXISTS "Admin write lineup_slots" ON public.lineup_slots;
+DROP POLICY IF EXISTS "Admin write leagues" ON public.leagues;
+DROP POLICY IF EXISTS "Admin write matches" ON public.matches;
+DROP POLICY IF EXISTS "Admin write match_players" ON public.match_players;
+DROP POLICY IF EXISTS "Admin write goals" ON public.goals;
+DROP POLICY IF EXISTS "Admin write power_history" ON public.power_history;
+
+-- 5.2 Ziyaretçi Okuma Kuralları
 CREATE POLICY "Public read teams" ON public.teams FOR SELECT USING (true);
 CREATE POLICY "Public read players" ON public.players FOR SELECT USING (true);
 CREATE POLICY "Public read lineup_slots" ON public.lineup_slots FOR SELECT USING (true);
@@ -224,11 +238,10 @@ CREATE POLICY "Public read matches" ON public.matches FOR SELECT USING (true);
 CREATE POLICY "Public read match_players" ON public.match_players FOR SELECT USING (true);
 CREATE POLICY "Public read goals" ON public.goals FOR SELECT USING (true);
 
--- 5.2 POWER_HISTORY İSTİSNASI: Ziyaretçi ASLA okuyamaz! Sadece giriş yapmış yönetici okur.
-CREATE POLICY "Admin read power_history" ON public.power_history 
-FOR SELECT TO authenticated USING (true);
+-- 5.3 Power History Gizliliği (Sadece Giriş Yapan Yönetici)
+CREATE POLICY "Admin read power_history" ON public.power_history FOR SELECT TO authenticated USING (true);
 
--- 5.3 YÖNETİCİ YAZMA YETKİLERİ (Sadece authenticated/yönetici INSERT/UPDATE/DELETE yapabilir)
+-- 5.4 Yönetici Yazma Kuralları
 CREATE POLICY "Admin write teams" ON public.teams FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Admin write players" ON public.players FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Admin write lineup_slots" ON public.lineup_slots FOR ALL TO authenticated USING (true) WITH CHECK (true);
@@ -239,45 +252,63 @@ CREATE POLICY "Admin write goals" ON public.goals FOR ALL TO authenticated USING
 CREATE POLICY "Admin write power_history" ON public.power_history FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- ==============================================================================
--- 6. REALTIME YAYINI
+-- 6. REALTIME YAYINI (GÜVENLİ EKLEME)
 -- ==============================================================================
--- Tablolardaki değişikliklerin ziyaretçilerin ekranına anında düşmesi için
-BEGIN;
-  DROP PUBLICATION IF EXISTS supabase_realtime;
-  CREATE PUBLICATION supabase_realtime FOR TABLE 
-    public.lineup_slots, 
-    public.players, 
-    public.teams, 
-    public.matches, 
-    public.match_players, 
-    public.goals, 
-    public.leagues;
-COMMIT;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    CREATE PUBLICATION supabase_realtime;
+  END IF;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.lineup_slots;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.players;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.teams;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.matches;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.match_players;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.goals;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.leagues;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+END $$;
 
 -- ==============================================================================
 -- 7. STORAGE BUCKET (player-photos)
 -- ==============================================================================
--- Fotoğrafların yüklenmesi için storage bucket ve erişim kuralları
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('player-photos', 'player-photos', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Storage RLS: Herkes fotoğrafları görebilir, sadece yönetici yükleyebilir/silebilir
-CREATE POLICY "Public read player photos" 
-ON storage.objects FOR SELECT 
-USING (bucket_id = 'player-photos');
+DROP POLICY IF EXISTS "Public read player photos" ON storage.objects;
+DROP POLICY IF EXISTS "Admin insert player photos" ON storage.objects;
+DROP POLICY IF EXISTS "Admin update player photos" ON storage.objects;
+DROP POLICY IF EXISTS "Admin delete player photos" ON storage.objects;
 
-CREATE POLICY "Admin insert player photos" 
-ON storage.objects FOR INSERT 
-TO authenticated 
-WITH CHECK (bucket_id = 'player-photos');
-
-CREATE POLICY "Admin update player photos" 
-ON storage.objects FOR UPDATE 
-TO authenticated 
-USING (bucket_id = 'player-photos');
-
-CREATE POLICY "Admin delete player photos" 
-ON storage.objects FOR DELETE 
-TO authenticated 
-USING (bucket_id = 'player-photos');
+CREATE POLICY "Public read player photos" ON storage.objects FOR SELECT USING (bucket_id = 'player-photos');
+CREATE POLICY "Admin insert player photos" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'player-photos');
+CREATE POLICY "Admin update player photos" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'player-photos');
+CREATE POLICY "Admin delete player photos" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'player-photos');
