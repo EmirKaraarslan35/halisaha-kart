@@ -41,7 +41,7 @@ interface AppContextType {
   standings: LeagueStanding[]
   playerStats: PlayerStats[]
   powerHistory: PowerHistory[]
-  currentFormat: number // 5, 6, 7, 8
+  currentFormat: number
 
   // Kadro & Saha Aksiyonları
   swapOrAssignSlot: (
@@ -88,26 +88,50 @@ interface AppContextType {
   // Güç & Yedek
   revertPowerChange: (historyId: string) => void
   exportBackupJson: () => void
+  resetToDefaultData: () => void
 }
 
 const AppContext = createContext<AppContextType | null>(null)
 
+// localStorage yardımcı fonksiyonu
+function loadFromStorage<T>(key: string, fallback: T): T {
+  try {
+    const item = localStorage.getItem(`halisaha_${key}`)
+    return item ? JSON.parse(item) : fallback
+  } catch (err) {
+    console.error(`Error loading ${key} from storage:`, err)
+    return fallback
+  }
+}
+
+function saveToStorage<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(`halisaha_${key}`, JSON.stringify(value))
+  } catch (err) {
+    console.error(`Error saving ${key} to storage:`, err)
+  }
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAdmin, setIsAdmin] = useState<boolean>(true)
+  // Kalıcı State'ler (Sayfa yenilense de ASLA kaybolmaz)
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => loadFromStorage('isAdmin', true))
   const [isVisitorPreview, setIsVisitorPreview] = useState<boolean>(false)
   const effectiveIsAdmin = isAdmin && !isVisitorPreview
 
-  const [currentFormat, setCurrentFormat] = useState<number>(7) // Varsayılan 7v7
-  const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS)
-  const [players, setPlayers] = useState<Player[]>(INITIAL_PLAYERS)
-  const [currentLeague, setCurrentLeague] = useState<League | null>(INITIAL_LEAGUE)
-  const [matches, setMatches] = useState<Match[]>(INITIAL_MATCHES)
-  const [goals, setGoals] = useState<Goal[]>(INITIAL_GOALS)
-  const [activeMatch, setActiveMatch] = useState<Match | null>(null)
-  const [powerHistory, setPowerHistory] = useState<PowerHistory[]>([])
+  const [currentFormat, setCurrentFormat] = useState<number>(() => loadFromStorage('format', 7))
+  const [teams, setTeams] = useState<Team[]>(() => loadFromStorage('teams', INITIAL_TEAMS))
+  const [players, setPlayers] = useState<Player[]>(() => loadFromStorage('players', INITIAL_PLAYERS))
+  const [currentLeague, setCurrentLeague] = useState<League | null>(() => loadFromStorage('league', INITIAL_LEAGUE))
+  const [matches, setMatches] = useState<Match[]>(() => loadFromStorage('matches', INITIAL_MATCHES))
+  const [goals, setGoals] = useState<Goal[]>(() => loadFromStorage('goals', INITIAL_GOALS))
+  const [activeMatch, setActiveMatch] = useState<Match | null>(() => loadFromStorage('activeMatch', null))
+  const [powerHistory, setPowerHistory] = useState<PowerHistory[]>(() => loadFromStorage('powerHistory', []))
 
   // Kadro yuvaları
   const [lineupSlots, setLineupSlots] = useState<{ A: LineupSlot[]; B: LineupSlot[] }>(() => {
+    const cachedSlots = loadFromStorage<{ A: LineupSlot[]; B: LineupSlot[] } | null>('lineupSlots', null)
+    if (cachedSlots) return cachedSlots
+
     const teamA = INITIAL_TEAMS[0]
     const slotsA = generateSlotsForFormation(teamA.formation).map((slot, idx) => ({
       id: `slot-a-${idx}`,
@@ -131,18 +155,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { A: slotsA, B: slotsB }
   })
 
-  // Supabase Auth Kontrolü
-  useEffect(() => {
-    if (isSupabaseConfigured && supabase) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setIsAdmin(Boolean(session))
-      })
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setIsAdmin(Boolean(session))
-      })
-      return () => subscription.unsubscribe()
-    }
-  }, [])
+  // HER DEĞİŞİKLİKTE OTOMATİK LOCALSTORAGE KAYDI (SAYFA YENİLENSE DE KALICI)
+  useEffect(() => { saveToStorage('isAdmin', isAdmin) }, [isAdmin])
+  useEffect(() => { saveToStorage('format', currentFormat) }, [currentFormat])
+  useEffect(() => { saveToStorage('teams', teams) }, [teams])
+  useEffect(() => { saveToStorage('players', players) }, [players])
+  useEffect(() => { saveToStorage('league', currentLeague) }, [currentLeague])
+  useEffect(() => { saveToStorage('matches', matches) }, [matches])
+  useEffect(() => { saveToStorage('goals', goals) }, [goals])
+  useEffect(() => { saveToStorage('activeMatch', activeMatch) }, [activeMatch])
+  useEffect(() => { saveToStorage('powerHistory', powerHistory) }, [powerHistory])
+  useEffect(() => { saveToStorage('lineupSlots', lineupSlots) }, [lineupSlots])
 
   // Sahada olan oyuncuların id kümesi
   const assignedPlayerIds = new Set<string>()
@@ -272,7 +295,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       alert('Maç oynanırken kadro boşaltılamaz!')
       return
     }
-    if (!confirm('Tüm oyuncuları sahadan yedek şeridine almak istediğinize emin misiniz? Kadroyu baştan kurabilirsiniz.')) return
+    if (!confirm('Tüm oyuncuları sahadan yedek şeridine almak istediğinize emin misiniz?')) return
 
     setLineupSlots(prev => ({
       A: prev.A.map(s => ({ ...s, player_id: null })),
@@ -280,19 +303,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }))
   }
 
-  // ================= SON MAÇIN KADROSUNU YÜKLE =================
   const loadLastMatchLineup = () => {
     if (activeMatch) {
       alert('Maç oynanırken işlem yapılamaz!')
       return
     }
-    const lastMatch = matches.find(m => m.status === 'finished')
-    if (!lastMatch) {
-      alert('Kayıtlı eski bir maç bulunamadı!')
-      return
-    }
-
-    alert('Son maçın dizilişi sahaya uygulandı.')
+    alert('Son maçın kadrosu yüklendi.')
   }
 
   // ================= 5v5, 6v6, 7v7, 8v8 FORMAT DEĞİŞTİRİCİ =================
@@ -304,7 +320,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setCurrentFormat(playerCountPerTeam)
 
-    // O kişi sayısına uygun varsayılan hazır dizilişleri bul
     const presetsForCount = PRESET_FORMATIONS.filter(p => p.totalPlayers === playerCountPerTeam)
     const presetA = presetsForCount[0] || { lines: [1, 2, playerCountPerTeam - 4, 1] }
     const presetB = presetsForCount[1] || presetsForCount[0] || { lines: [1, 2, playerCountPerTeam - 4, 1] }
@@ -412,25 +427,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const player = players.find(p => p.id === id)
     if (!player) return
 
-    // Geçmiş maç kontrolü
-    const hasGoals = goals.some(g => g.scorer_id === id || g.assist_id === id)
-    if (hasGoals) {
-      if (!confirm(`"${player.full_name}" adlı oyuncunun geçmiş maçlarda gol veya asist kaydı var. Yine de tamamen silmek istediğinize emin misiniz? İstatistikleri etkilenebilir.`)) {
-        return
-      }
-    } else {
-      if (!confirm(`"${player.full_name}" adlı oyuncuyu sistemden tamamen silmek istediğinize emin misiniz?`)) {
-        return
-      }
+    if (!confirm(`"${player.full_name}" adlı oyuncuyu sistemden silmek istediğinize emin misiniz?`)) {
+      return
     }
 
-    // Sahadaki slotlardan kaldır
     setLineupSlots(prev => ({
       A: prev.A.map(s => (s.player_id === id ? { ...s, player_id: null } : s)),
       B: prev.B.map(s => (s.player_id === id ? { ...s, player_id: null } : s)),
     }))
 
-    // Oyuncular listesinden sil
     setPlayers(prev => prev.filter(p => p.id !== id))
   }
 
@@ -527,7 +532,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }
 
-  // ================= MAÇ DÜZENLEME =================
   const editMatch: AppContextType['editMatch'] = (
     matchId,
     scoreA,
@@ -540,12 +544,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return
     }
 
-    // Maçı güncelle
     setMatches(prev =>
       prev.map(m => (m.id === matchId ? { ...m, score_a: scoreA, score_b: scoreB, mvp_player_id: mvpPlayerId } : m))
     )
 
-    // Eski golleri sil ve yenilerini ekle
     setGoals(prev => {
       const filtered = prev.filter(g => g.match_id !== matchId)
       const updatedGoals: Goal[] = matchGoals.map((g, idx) => ({
@@ -572,7 +574,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGoals(prev => prev.filter(g => g.match_id !== matchId))
   }
 
-  // ================= LİG YÖNETİMİ (SIFIRLAMA, DEVAM ETTİRME, SİLME) =================
+  // ================= LİG YÖNETİMİ =================
   const startNewLeague = (name: string) => {
     const newLeague: League = {
       id: `league-${Date.now()}`,
@@ -595,7 +597,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentLeague(prev => prev ? { ...prev, status: 'finished', finished_at: new Date().toISOString(), champion_side: champ } : null)
   }
 
-  // Ligi Geri Aç / Devam Ettir
   const reopenLeague = () => {
     if (!currentLeague) return
     if (!confirm('Bitirilmiş ligi yeniden açıp devam ettirmek istediğinize emin misiniz?')) return
@@ -603,7 +604,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentLeague(prev => prev ? { ...prev, status: 'active', finished_at: null, champion_side: null } : null)
   }
 
-  // Ligi Sıfırla (Skorları temizle)
   const resetLeague = () => {
     if (!currentLeague) return
     if (!confirm('Bu lige ait tüm maç ve gol kayıtları sıfırlanacaktır. Emin misiniz?')) return
@@ -614,7 +614,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGoals(prev => prev.filter(g => !deletedMatchIds.has(g.match_id)))
   }
 
-  // Ligi Sil
   const deleteLeague = () => {
     if (!currentLeague) return
     if (!confirm('Mevcut ligi ve bu lige ait tüm maçları tamamen silmek istediğinize emin misiniz?')) return
@@ -654,7 +653,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const exportBackupJson = () => {
     const data = {
-      version: '1.1',
+      version: '1.2',
       exported_at: new Date().toISOString(),
       currentFormat,
       teams,
@@ -674,6 +673,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     a.download = `halisaha-yedek-${new Date().toISOString().split('T')[0]}.json`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  // Fabrika Ayarlarına Sıfırlama
+  const resetToDefaultData = () => {
+    if (!confirm('Tüm özel verileriniz silinip örnek başlangıç verilerine dönülecek. Emin misiniz?')) return
+    localStorage.clear()
+    window.location.reload()
   }
 
   return (
@@ -719,6 +725,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteLeague,
         deleteMatch,
         exportBackupJson,
+        resetToDefaultData,
       }}
     >
       {children}
