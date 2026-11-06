@@ -1,0 +1,181 @@
+@import "tailwindcss";
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    background-color: #020617;
+    color: #f8fafc;
+    overflow-x: hidden;
+  }
+}
+
+/* FUT Condensed Display Font */
+.fut-font {
+  font-family: 'Teko', sans-serif;
+  letter-spacing: 0.5px;
+  line-height: 0.85;
+}
+
+/* ================= FIFA Kalkan Geometrisi (FUT Shield Clip Paths) ================= */
+.fut-shield {
+  clip-path: polygon(
+    0% 12px, 
+    12px 0%, 
+    calc(100% - 12px) 0%, 
+    100% 12px, 
+    100% 84%, 
+    50% 100%, 
+    0% 84%
+  );
+}
+
+.fut-shield-md {
+  clip-path: polygon(
+    0% 8px, 
+    8px 0%, 
+    calc(100% - 8px) 0%, 
+    100% 8px, 
+    100% 85%, 
+    50% 100%, 
+    0% 85%
+  );
+}
+
+.fut-shield-mini {
+  clip-path: polygon(
+    0% 6px, 
+    6px 0%, 
+    calc(100% - 6px) 0%, 
+    100% 6px, 
+    100% 86%, 
+    50% 100%, 
+    0% 86%
+  );
+}
+
+/* ================= FUT Kart Doku ve Renk Katmanları ================= */
+
+/* Özel Kart (85+ OVR) */
+.fut-special-bg {
+  background: linear-gradient(135deg, #0284c7 0%, #4f46e5 30%, #9333ea 70%, #06b6d4 100%);
+  box-shadow: 0 0 18px rgba(99, 102, 241, 0.55), inset 0 0 8px rgba(255, 255, 255, 0.2);
+}
+.fut-special-inner {
+  background: radial-gradient(circle at 50% 15%, #1e1b4b 0%, #0f0a2a 50%, #030712 90%);
+  box-shadow: inset 0 0 16px rgba(129, 140, 248, 0.45);
+}
+
+/* Altın Kart (75 - 84 OVR) */
+.fut-gold-bg {
+  background: linear-gradient(135deg, #fef08a 0%, #ca8a04 22%, #854d0e 48%, #facc15 75%, #713f12 100%);
+  box-shadow: 0 0 14px rgba(234, 179, 8, 0.35), inset 0 0 6px rgba(255, 255, 255, 0.25);
+}
+.fut-gold-inner {
+  background: radial-gradient(circle at 50% 15%, #451a03 0%, #271203 55%, #140701 90%);
+  box-shadow: inset 0 0 12px rgba(250, 204, 21, 0.35);
+}
+
+/* Gümüş Kart (65 - 74 OVR) */
+.fut-silver-bg {
+  background: linear-gradient(135deg, #f8fafc 0%, #94a3b8 25%, #475569 55%, #cbd5e1 75%, #1e293b 100%);
+  box-shadow: 0 0 10px rgba(148, 163, 184, 0.3);
+}
+.fut-silver-inner {
+  background: radial-gradient(circle at 50% 15%, #1e293b 0%, #0f172a 85%);
+  box-shadow: inset 0 0 10px rgba(203, 213, 225, 0.25);
+}
+
+/* Bronz Kart (<65 OVR) */
+.fut-bronze-bg {
+  background: linear-gradient(135deg, #fed7aa 0%, #ea580c 25%, #7c2d12 60%, #c2410c 80%, #431407 100%);
+  box-shadow: 0 0 10px rgba(234, 88, 12, 0.25);
+}
+.fut-bronze-inner {
+  background: radial-gradient(circle at 50% 15%, #3c1405 0%, #1c0802 85%);
+  box-shadow: inset 0 0 10px rgba(234, 88, 12, 0.25);
+}
+
+/* ================= Holografik Shimmer (Işık Parıltısı) ================= */
+@keyframes futShimmer {
+  0% {
+    transform: translateX(-150%) rotate(35deg);
+  }
+  100% {
+    transform: translateX(250%) rotate(35deg);
+  }
+}
+
+.shimmer-effect {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-effect::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.03) 40%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.03) 60%,
+    transparent 100%
+  );
+  transform: rotate(35deg);
+  animation: futShimmer 5s infinite cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+/* ================= Stadyum Çim Sahası ve Çizgileri ================= */
+.stadium-pitch {
+  background: 
+    radial-gradient(ellipse at 50% -10%, rgba(56, 189, 248, 0.28) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 110%, rgba(251, 191, 36, 0.22) 0%, transparent 60%),
+    repeating-linear-gradient(0deg, #15803d 0px, #15803d 26px, #166534 26px, #166534 52px);
+  box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.9);
+}
+
+/* Parlayan Saha Çizgileri */
+.pitch-line {
+  background-color: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.35);
+}
+
+/* Kale Ağı Deseni (Net Mesh Texture) */
+.goal-net {
+  background-image: 
+    linear-gradient(45deg, rgba(255, 255, 255, 0.12) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.12) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.12) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.12) 75%);
+  background-size: 8px 8px;
+}
+
+/* ================= Mobil Yatay Kaydırma (Touch-Friendly) ================= */
+.smooth-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  scroll-behavior: smooth;
+  scroll-padding: 0.5rem;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  height: 4px;
+}
+.no-scrollbar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 9999px;
+}
+.no-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.4);
+  border-radius: 9999px;
+}
