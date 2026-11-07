@@ -19,6 +19,15 @@ import {
   INITIAL_GOALS,
 } from '../lib/mockData'
 import { generateSlotsForFormation, PRESET_FORMATIONS } from '../lib/formations'
+import { supabase } from '../lib/supabase'
+import {
+  fetchCloudData,
+  syncSlotsToCloud,
+  syncPlayerToCloud,
+  deletePlayerFromCloud,
+  generateUuid,
+  isUuid,
+} from '../lib/supabaseSync'
 
 interface AppContextType {
   isAdmin: boolean
@@ -166,6 +175,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { saveToStorage('powerHistory', powerHistory) }, [powerHistory])
   useEffect(() => { saveToStorage('lineupSlots', lineupSlots) }, [lineupSlots])
 
+  // ================= SUPABASE BULUT SENKRONİZASYONU =================
+  useEffect(() => {
+    let isMounted = true
+
+    async function initCloud() {
+      try {
+        const cloud = await fetchCloudData()
+        if (!isMounted || !cloud) return
+
+        if (cloud.teams && cloud.teams.length >= 2) {
+          setTeams(cloud.teams)
+        }
+
+        if (cloud.players && cloud.players.length > 0) {
+          setPlayers(cloud.players)
+        } else if (players.length > 0) {
+          for (const p of players) {
+            syncPlayerToCloud(p)
+          }
+        }
+
+        if (cloud.lineupSlots && (cloud.lineupSlots.A.length > 0 || cloud.lineupSlots.B.length > 0)) {
+          setLineupSlots(cloud.lineupSlots)
+        } else if (lineupSlots.A.length > 0 && cloud.teams.length >= 2) {
+          syncSlotsToCloud(lineupSlots.A, lineupSlots.B, cloud.teams[0].id, cloud.teams[1].id)
+        }
+
+        if (cloud.league) setCurrentLeague(cloud.league)
+        if (cloud.matches && cloud.matches.length > 0) setMatches(cloud.matches)
+        if (cloud.goals && cloud.goals.length > 0) setGoals(cloud.goals)
+      } catch (err) {
+        console.error('Cloud init error:', err)
+      }
+    }
+
+    initCloud()
+
+    // Canlı Değişiklik Dinleyici (Başka biri veya yönetici kadroyu değiştirince anında ekran güncellenir)
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lineup_slots' }, async () => {
+        const fresh = await fetchCloudData()
+        if (fresh && fresh.lineupSlots && fresh.lineupSlots.A.length > 0) {
+          setLineupSlots(fresh.lineupSlots)
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, async () => {
+        const fresh = await fetchCloudData()
+        if (fresh && fresh.players && fresh.players.length > 0) {
+          setPlayers(fresh.players)
+        }
+      })
+      .subscribe()
+
+    return () => {
+      isMounted = false
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
   // Sahadaki oyuncu id'leri
   const assignedPlayerIds = new Set<string>()
   lineupSlots.A.forEach(s => s.player_id && assignedPlayerIds.add(s.player_id))
@@ -257,7 +326,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).sort((a, b) => b.total_goals - a.total_goals || b.total_assists - a.total_assists)
   }, [players, goals, matches])
 
-  // ================= KADRO DEĞİŞİKLİĞİ (GÜVENLİ & IMMUTABLE) =================
+  // ================= KADRO DEĞİŞİKLİĞİ (GÜVENLİ & IMMUTABLE & BULUT SENKRONİZASYONLU) =================
   const swapOrAssignSlot: AppContextType['swapOrAssignSlot'] = (source, target) => {
     if (activeMatch) {
       alert('Maç oynanırken kadro değiştirilemez!')
@@ -296,11 +365,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      if (teams.length >= 2) {
+        syncSlotsToCloud(nextA, nextB, teams[0].id, teams[1].id)
+      }
+
       return { A: nextA, B: nextB }
     })
   }
 
-  // Doğrudan Slota Oyuncu Atama
+  // Doğrudan Slota Oyuncu Atama (Buluta Anında Kaydeder)
   const assignPlayerToSlot = (playerId: string, side: TeamSide, slotIndex: number) => {
     if (activeMatch) return
     setLineupSlots(prev => {
@@ -317,11 +390,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (targetSlot) {
         targetSlot.player_id = playerId
       }
+
+      if (teams.length >= 2) {
+        syncSlotsToCloud(nextA, nextB, teams[0].id, teams[1].id)
+      }
+
       return { A: nextA, B: nextB }
     })
   }
 
-  // Slottan Oyuncuyu Çıkarma (Yedeğe Alma)
+  // Slottan Oyuncuyu Çıkarma (Yedeğe Alma & Bulut Senkronu)
   const removePlayerFromSlot = (side: TeamSide, slotIndex: number) => {
     if (activeMatch) return
     setLineupSlots(prev => {
@@ -332,11 +410,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return s
       })
-      return { ...prev, [targetSide]: updatedList }
+      const nextSlots = { ...prev, [targetSide]: updatedList }
+      if (teams.length >= 2) {
+        syncSlotsToCloud(nextSlots.A, nextSlots.B, teams[0].id, teams[1].id)
+      }
+      return nextSlots
     })
   }
 
-  // ================= SAHAYI BOŞALT (HERKESİ YEDEĞE AT) =================
+  // ================= SAHAYI BOŞALT (HERKESİ YEDEĞE AT & BULUT SENKRONU) =================
   const clearPitchToRibbon = () => {
     if (activeMatch) {
       alert('Maç oynanırken kadro boşaltılamaz!')
@@ -344,10 +426,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     if (!confirm('Tüm oyuncuları sahadan yedek şeridine almak istediğinize emin misiniz?')) return
 
-    setLineupSlots(prev => ({
-      A: prev.A.map(s => ({ ...s, player_id: null })),
-      B: prev.B.map(s => ({ ...s, player_id: null })),
-    }))
+    setLineupSlots(prev => {
+      const emptyA = prev.A.map(s => ({ ...s, player_id: null }))
+      const emptyB = prev.B.map(s => ({ ...s, player_id: null }))
+      if (teams.length >= 2) {
+        syncSlotsToCloud(emptyA, emptyB, teams[0].id, teams[1].id)
+      }
+      return { A: emptyA, B: emptyB }
+    })
   }
 
   const loadLastMatchLineup = () => {
@@ -431,18 +517,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ================= OYUNCU YÖNETİMİ =================
   const addPlayer = (data: Omit<Player, 'id' | 'created_at'>) => {
+    const newId = generateUuid()
     const newPlayer: Player = {
       ...data,
-      id: `p-${Date.now()}`,
+      id: newId,
       created_at: new Date().toISOString(),
     }
-    setPlayers(prev => [...prev, newPlayer])
+    setPlayers(prev => [newPlayer, ...prev])
+    syncPlayerToCloud(newPlayer)
   }
 
   const updatePlayer = (id: string, data: Partial<Player>) => {
     setPlayers(prev =>
       prev.map(p => {
         if (p.id === id) {
+          const updated = { ...p, ...data }
+          syncPlayerToCloud(updated)
           if (data.power !== undefined && data.power !== p.power) {
             const historyEntry: PowerHistory = {
               id: `ph-${Date.now()}`,
@@ -457,7 +547,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
             setPowerHistory(ph => [historyEntry, ...ph])
           }
-          return { ...p, ...data }
+          return updated
         }
         return p
       })
@@ -466,7 +556,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const togglePlayerActive = (id: string) => {
     setPlayers(prev =>
-      prev.map(p => (p.id === id ? { ...p, is_active: !p.is_active } : p))
+      prev.map(p => {
+        if (p.id === id) {
+          const updated = { ...p, is_active: !p.is_active }
+          syncPlayerToCloud(updated)
+          return updated
+        }
+        return p
+      })
     )
   }
 
@@ -478,12 +575,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return
     }
 
-    setLineupSlots(prev => ({
-      A: prev.A.map(s => (s.player_id === id ? { ...s, player_id: null } : s)),
-      B: prev.B.map(s => (s.player_id === id ? { ...s, player_id: null } : s)),
-    }))
+    setLineupSlots(prev => {
+      const nextSlots = {
+        A: prev.A.map(s => (s.player_id === id ? { ...s, player_id: null } : s)),
+        B: prev.B.map(s => (s.player_id === id ? { ...s, player_id: null } : s)),
+      }
+      if (teams.length >= 2) {
+        syncSlotsToCloud(nextSlots.A, nextSlots.B, teams[0].id, teams[1].id)
+      }
+      return nextSlots
+    })
 
     setPlayers(prev => prev.filter(p => p.id !== id))
+    deletePlayerFromCloud(id)
   }
 
   // ================= MAÇ AKIŞI & DÜZENLEME =================
