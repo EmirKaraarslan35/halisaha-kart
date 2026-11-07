@@ -134,8 +134,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [teams, setTeams] = useState<Team[]>(() => loadFromStorage('teams', INITIAL_TEAMS))
   const [players, setPlayers] = useState<Player[]>(() => loadFromStorage('players', INITIAL_PLAYERS))
   const [currentLeague, setCurrentLeague] = useState<League | null>(() => loadFromStorage('league', INITIAL_LEAGUE))
-  const [matches, setMatches] = useState<Match[]>(() => loadFromStorage('matches', INITIAL_MATCHES))
-  const [goals, setGoals] = useState<Goal[]>(() => loadFromStorage('goals', INITIAL_GOALS))
+  const [matches, setMatches] = useState<Match[]>(() => loadFromStorage('matches', []))
+  const [goals, setGoals] = useState<Goal[]>(() => loadFromStorage('goals', []))
   const [activeMatch, setActiveMatch] = useState<Match | null>(() => loadFromStorage('activeMatch', null))
   const [powerHistory, setPowerHistory] = useState<PowerHistory[]>(() => loadFromStorage('powerHistory', []))
 
@@ -227,13 +227,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setMatches(cloud.matches)
         } else if (matches.length > 0) {
           for (const m of matches) {
-            const mGoals = goals.filter(g => g.match_id === m.id)
-            syncMatchToCloud(m, mGoals)
+            if (isUuid(m.id)) {
+              const mGoals = goals.filter(g => g.match_id === m.id)
+              syncMatchToCloud(m, mGoals)
+            }
           }
+        } else {
+          setMatches([])
         }
 
         if (cloud.goals && cloud.goals.length > 0) {
           setGoals(cloud.goals)
+        } else if (!cloud.matches || cloud.matches.length === 0) {
+          setGoals([])
         }
       } catch (err) {
         console.error('Cloud init error:', err)
