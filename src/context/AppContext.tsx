@@ -25,8 +25,12 @@ import {
   syncSlotsToCloud,
   syncPlayerToCloud,
   deletePlayerFromCloud,
+  syncLeagueToCloud,
+  syncMatchToCloud,
+  deleteMatchFromCloud,
   generateUuid,
   isUuid,
+  ensureUuid,
 } from '../lib/supabaseSync'
 
 interface AppContextType {
@@ -202,9 +206,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           syncSlotsToCloud(lineupSlots.A, lineupSlots.B, cloud.teams[0].id, cloud.teams[1].id)
         }
 
-        if (cloud.league) setCurrentLeague(cloud.league)
-        if (cloud.matches && cloud.matches.length > 0) setMatches(cloud.matches)
-        if (cloud.goals && cloud.goals.length > 0) setGoals(cloud.goals)
+        if (cloud.league) {
+          setCurrentLeague(cloud.league)
+        } else {
+          const defaultLeague: League = {
+            id: currentLeague && isUuid(currentLeague.id) ? currentLeague.id : generateUuid(),
+            name: currentLeague?.name || 'Kasım 2026 Sezonu',
+            status: 'active',
+            started_at: new Date().toISOString(),
+            finished_at: null,
+            champion_side: null,
+            note: null,
+            created_at: new Date().toISOString(),
+          }
+          setCurrentLeague(defaultLeague)
+          syncLeagueToCloud(defaultLeague)
+        }
+
+        if (cloud.matches && cloud.matches.length > 0) {
+          setMatches(cloud.matches)
+        } else if (matches.length > 0) {
+          for (const m of matches) {
+            const mGoals = goals.filter(g => g.match_id === m.id)
+            syncMatchToCloud(m, mGoals)
+          }
+        }
+
+        if (cloud.goals && cloud.goals.length > 0) {
+          setGoals(cloud.goals)
+        }
       } catch (err) {
         console.error('Cloud init error:', err)
       }
@@ -212,7 +242,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     initCloud()
 
-    // Canlı Değişiklik Dinleyici (Başka biri veya yönetici kadroyu değiştirince anında ekran güncellenir)
+    // Canlı Değişiklik Dinleyici (Başka biri veya yönetici maç, gol, lig, kadro değiştirince anında ekran güncellenir)
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lineup_slots' }, async () => {
@@ -225,6 +255,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const fresh = await fetchCloudData()
         if (fresh && fresh.players && fresh.players.length > 0) {
           setPlayers(fresh.players)
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, async () => {
+        const fresh = await fetchCloudData()
+        if (fresh) {
+          setMatches(fresh.matches)
+          setGoals(fresh.goals)
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'goals' }, async () => {
+        const fresh = await fetchCloudData()
+        if (fresh) {
+          setGoals(fresh.goals)
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leagues' }, async () => {
+        const fresh = await fetchCloudData()
+        if (fresh && fresh.league) {
+          setCurrentLeague(fresh.league)
         }
       })
       .subscribe()
@@ -602,8 +651,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const newMatch: Match = {
-      id: `match-${Date.now()}`,
-      league_id: currentLeague.id,
+      id: generateUuid(),
+      league_id: ensureUuid(currentLeague.id),
       status: 'playing',
       team_a_name: teamAName || teams[0].name,
       team_b_name: teamBName || teams[1].name,
@@ -618,11 +667,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setActiveMatch(newMatch)
+    syncMatchToCloud(newMatch, [])
   }
 
   const cancelMatch = () => {
     if (!activeMatch) return
     if (confirm('Maçı iptal etmek istediğinize emin misiniz?')) {
+      deleteMatchFromCloud(activeMatch.id)
       setActiveMatch(null)
     }
   }
@@ -641,25 +692,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return
     }
 
+    const matchId = ensureUuid(activeMatch.id)
+    const leagueId = ensureUuid(activeMatch.league_id)
+
     const finishedMatch: Match = {
       ...activeMatch,
+      id: matchId,
+      league_id: leagueId,
       status: 'finished',
       score_a: scoreA,
       score_b: scoreB,
-      mvp_player_id: mvpPlayerId,
+      mvp_player_id: mvpPlayerId && isUuid(mvpPlayerId) ? mvpPlayerId : null,
       finished_at: new Date().toISOString(),
     }
 
-    const createdGoals: Goal[] = matchGoals.map((g, idx) => ({
+    const createdGoals: Goal[] = matchGoals.map(g => ({
       ...g,
-      id: `goal-${Date.now()}-${idx}`,
-      match_id: finishedMatch.id,
+      id: generateUuid(),
+      match_id: matchId,
+      scorer_id: ensureUuid(g.scorer_id),
+      assist_id: g.assist_id && isUuid(g.assist_id) ? g.assist_id : null,
       created_at: new Date().toISOString(),
     }))
 
     setGoals(prev => [...prev, ...createdGoals])
     setMatches(prev => [finishedMatch, ...prev])
     setActiveMatch(null)
+
+    // SUPABASE'E CANLI YAZ
+    syncMatchToCloud(finishedMatch, createdGoals)
 
     if (applyMvpPowerBonus && mvpPlayerId) {
       const mvp = players.find(p => p.id === mvpPlayerId)
@@ -695,18 +756,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return
     }
 
-    setMatches(prev =>
-      prev.map(m => (m.id === matchId ? { ...m, score_a: scoreA, score_b: scoreB, mvp_player_id: mvpPlayerId } : m))
-    )
+    const updatedGoals: Goal[] = matchGoals.map(g => ({
+      ...g,
+      id: generateUuid(),
+      match_id: matchId,
+      scorer_id: ensureUuid(g.scorer_id),
+      assist_id: g.assist_id && isUuid(g.assist_id) ? g.assist_id : null,
+      created_at: new Date().toISOString(),
+    }))
+
+    setMatches(prev => {
+      const next = prev.map(m => (m.id === matchId ? { ...m, score_a: scoreA, score_b: scoreB, mvp_player_id: mvpPlayerId } : m))
+      const target = next.find(m => m.id === matchId)
+      if (target) {
+        syncMatchToCloud(target, updatedGoals)
+      }
+      return next
+    })
 
     setGoals(prev => {
       const filtered = prev.filter(g => g.match_id !== matchId)
-      const updatedGoals: Goal[] = matchGoals.map((g, idx) => ({
-        ...g,
-        id: `goal-edit-${Date.now()}-${idx}`,
-        match_id: matchId,
-        created_at: new Date().toISOString(),
-      }))
       return [...filtered, ...updatedGoals]
     })
   }
@@ -723,12 +792,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setMatches(prev => prev.filter(m => m.id !== matchId))
     setGoals(prev => prev.filter(g => g.match_id !== matchId))
+    deleteMatchFromCloud(matchId)
   }
 
   // ================= LİG YÖNETİMİ =================
   const startNewLeague = (name: string) => {
     const newLeague: League = {
-      id: `league-${Date.now()}`,
+      id: generateUuid(),
       name: name || `${new Date().toLocaleString('tr-TR', { month: 'long', year: 'numeric' })} Sezonu`,
       status: 'active',
       started_at: new Date().toISOString(),
@@ -738,6 +808,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       created_at: new Date().toISOString(),
     }
     setCurrentLeague(newLeague)
+    syncLeagueToCloud(newLeague)
   }
 
   const finishCurrentLeague = () => {
@@ -745,14 +816,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!confirm('Mevcut ligi bitirip şampiyonu ilan etmek istediğinize emin misiniz?')) return
 
     const champ = standings.length > 0 ? standings[0].side : null
-    setCurrentLeague(prev => prev ? { ...prev, status: 'finished', finished_at: new Date().toISOString(), champion_side: champ } : null)
+    const updated = {
+      ...currentLeague,
+      status: 'finished' as const,
+      finished_at: new Date().toISOString(),
+      champion_side: champ,
+    }
+    setCurrentLeague(updated)
+    syncLeagueToCloud(updated)
   }
 
   const reopenLeague = () => {
     if (!currentLeague) return
     if (!confirm('Bitirilmiş ligi yeniden açıp devam ettirmek istediğinize emin misiniz?')) return
 
-    setCurrentLeague(prev => prev ? { ...prev, status: 'active', finished_at: null, champion_side: null } : null)
+    const updated = {
+      ...currentLeague,
+      status: 'active' as const,
+      finished_at: null,
+      champion_side: null,
+    }
+    setCurrentLeague(updated)
+    syncLeagueToCloud(updated)
   }
 
   const resetLeague = () => {
@@ -760,8 +845,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!confirm('Bu lige ait tüm maç ve gol kayıtları sıfırlanacaktır. Emin misiniz?')) return
 
     const leagueId = currentLeague.id
+    const leagueMatches = matches.filter(m => m.league_id === leagueId)
+    leagueMatches.forEach(m => deleteMatchFromCloud(m.id))
+
     setMatches(prev => prev.filter(m => m.league_id !== leagueId))
-    const deletedMatchIds = new Set(matches.filter(m => m.league_id === leagueId).map(m => m.id))
+    const deletedMatchIds = new Set(leagueMatches.map(m => m.id))
     setGoals(prev => prev.filter(g => !deletedMatchIds.has(g.match_id)))
   }
 
@@ -770,8 +858,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!confirm('Mevcut ligi ve bu lige ait tüm maçları tamamen silmek istediğinize emin misiniz?')) return
 
     const leagueId = currentLeague.id
+    const leagueMatches = matches.filter(m => m.league_id === leagueId)
+    leagueMatches.forEach(m => deleteMatchFromCloud(m.id))
+
     setMatches(prev => prev.filter(m => m.league_id !== leagueId))
-    const deletedMatchIds = new Set(matches.filter(m => m.league_id === leagueId).map(m => m.id))
+    const deletedMatchIds = new Set(leagueMatches.map(m => m.id))
     setGoals(prev => prev.filter(g => !deletedMatchIds.has(g.match_id)))
     setCurrentLeague(null)
   }
